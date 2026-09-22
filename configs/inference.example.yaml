@@ -1,0 +1,24 @@
+# Example inference configuration.
+# Copy to configs/inference.yaml and adjust for the target environment.
+
+image:
+  size: 224
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+hierarchical:
+  pneumonia_threshold: 0.5
+  subtype_threshold: 0.5
+
+labels:
+  binary:
+    0: Normal
+    1: Pneumonia
+  subtype:
+    0: Bacterial Pneumonia
+    1: Viral Pneumonia
+
+hugging_face:
+  binary_model_id: ${HF_BINARY_MODEL_ID}
+  subtype_model_id: ${HF_SUBTYPE_MODEL_ID}
+

@@ -1,0 +1,28 @@
+# Example configuration for Bacterial vs Viral subtype training.
+
+task: pneumonia_subtype_classification
+seed: 42
+
+data:
+  train_csv: data/splits/train.csv
+  val_csv: data/splits/val.csv
+  test_csv: data/splits/test.csv
+  label_mode: subtype
+
+model:
+  name: resnet18
+  num_classes: 2
+  pretrained: true
+  freeze_backbone: true
+
+training:
+  batch_size: 16
+  epochs: 30
+  patience: 7
+  learning_rate: 0.0001
+  use_class_weights: true
+
+output:
+  checkpoint_path: saved_models/bacterial_vs_viral.pt
+  report_dir: reports/subtype
+
