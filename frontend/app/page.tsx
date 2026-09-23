@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { healthCheck, predict } from "./lib/api";
 import type { PredictResponse } from "./lib/types";
@@ -154,11 +155,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [pipelineReady, setPipelineReady] = useState<boolean | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Track the current blob URL so we can revoke it on unmount or replacement. */
   const previewUrlRef = useRef<string | null>(null);
 
   /**
-   * Revoke the previous object URL whenever the preview changes or the
-   * component unmounts, so we do not leak blob URLs.
+   * Revoke the current blob URL when the preview is replaced or the component
+   * unmounts, so we never leak object URLs.
    */
   useEffect(() => {
     return () => {
@@ -168,20 +170,6 @@ export default function Home() {
       }
     };
   }, []);
-
-  /**
-   * Track the preview URL so onRemove() can revoke the correct one.
-   */
-  useEffect(() => {
-    previewUrlRef.current = preview;
-    return () => {
-      // When preview changes away from this value, revoke the old one.
-      if (previewUrlRef.current === preview && preview) {
-        URL.revokeObjectURL(preview);
-        previewUrlRef.current = null;
-      }
-    };
-  }, [preview]);
 
   /**
    * Report progress from the predict() call back into our label state.
@@ -232,14 +220,15 @@ export default function Home() {
     }
 
     // Revoke the previously painted object URL so we do not leak blobs.
-    if (previewUrlRef.current) {
+    if (previewUrlRef.current && previewUrlRef.current !== preview) {
       URL.revokeObjectURL(previewUrlRef.current);
     }
 
+    previewUrlRef.current = URL.createObjectURL(selected);
     setFile(selected);
     setError(null);
     setResult(null);
-    setPreview(URL.createObjectURL(selected));
+    setPreview(previewUrlRef.current);
   }
 
   /**
@@ -280,15 +269,18 @@ export default function Home() {
    */
   function onRemove() {
     setFile(null);
-    if (previewUrlRef.current) {
-      URL.revokeObjectURL(previewUrlRef.current);
-      previewUrlRef.current = null;
-    }
-    setPreview(null);
     setResult(null);
     setError(null);
     setProgress(0);
     setProgressLabel("");
+
+    const current = previewUrlRef.current;
+    if (current) {
+      previewUrlRef.current = null;
+      setPreview(null);
+      // Defer revocation so the img element has unloaded the src.
+      requestAnimationFrame(() => URL.revokeObjectURL(current));
+    }
   }
 
   return (
@@ -393,10 +385,15 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="footer">
-        <p>
-          Powered by a hierarchical classification pipeline: Normal vs Pneumonia,
-          then Bacterial vs Viral subtype.
-        </p>
+        <div className="footer-inner">
+          <p>
+            Powered by a hierarchical classification pipeline: Normal vs Pneumonia,
+            then Bacterial vs Viral subtype.
+          </p>
+          <Link href="/research" className="footer-link">
+            View research results
+          </Link>
+        </div>
       </footer>
     </main>
   );
