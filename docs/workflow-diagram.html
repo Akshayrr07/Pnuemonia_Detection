@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pneumonia Detection — Inference Workflow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0f1117;
+    color: #e4e7ed;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1.5rem 3rem;
+    min-height: 100vh;
+  }
+  h1 { font-size: 1.45rem; font-weight: 600; margin-bottom: 0.25rem; letter-spacing: -0.01em; }
+  .subtitle { color: #7a8394; font-size: 0.85rem; margin-bottom: 2rem; }
+  .diagram {
+    background: #151820;
+    border: 1px solid #252a35;
+    border-radius: 12px;
+    padding: 1.5rem 1.5rem;
+    width: 100%;
+    max-width: 780px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    margin-bottom: 0.25rem;
+  }
+  .step-num {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #2563eb;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-num.done { background: #10b981; }
+  .step-box {
+    flex: 1;
+    background: #1a1f2e;
+    border: 1px solid #2a3140;
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.8rem;
+  }
+  .step-box .title {
+    font-weight: 600;
+    color: #e4e7ed;
+    margin-bottom: 0.15rem;
+  }
+  .step-box .detail {
+    font-size: 0.7rem;
+    color: #7a8394;
+  }
+  .step-box.decision {
+    border-color: #f59e0b;
+    background: #2a2418;
+  }
+  .step-box.decision .title { color: #fbbf24; }
+  .step-box.success {
+    border-color: #10b981;
+    background: #142620;
+  }
+  .step-box.success .title { color: #34d399; }
+  .step-box.fail {
+    border-color: #ef4444;
+    background: #2a1414;
+  }
+  .step-box.fail .title { color: #f87171; }
+  .arrow {
+    font-size: 0.9rem;
+    color: #5f6b80;
+    line-height: 1;
+  }
+  .branch {
+    display: flex;
+    gap: 1.5rem;
+    width: 100%;
+    margin: 0.4rem 0;
+  }
+  .branch-item { flex: 1; }
+  .response {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #0f1320;
+    border: 1px solid #2a3150;
+    border-radius: 8px;
+    width: 100%;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 0.72rem;
+    line-height: 1.6;
+    color: #93c5fd;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .response .label { color: #fbbf24; }
+  .response .val  { color: #34d399; }
+  .response .key  { color: #93c5fd; }
+  .response .disc { color: #7a8394; font-style: italic; }
+</style>
+</head>
+<body>
+
+<h1>Inference Workflow</h1>
+<p class="subtitle">How a chest X-ray becomes a structured prediction — from upload to response</p>
+
+<div class="diagram">
+
+  <div class="step">
+    <div class="step-num done">1</div>
+    <div class="step-box">
+      <div class="title">Upload</div>
+      <div class="detail">User selects a chest X-ray (JPEG/PNG, ≤ 10 MB) on the Next.js frontend</div>
+    </div>
+  </div>
+  <div class="arrow">▼</div>
+
+  <div class="step">
+    <div class="step-num done">2</div>
+    <div class="step-box">
+      <div class="title">Validation</div>
+      <div class="detail">Backend checks file type, extension, size, and that the image can actually be decoded. Corrupt files → 400.</div>
+    </div>
+  </div>
+  <div class="arrow">▼</div>
+
+  <div class="step">
+    <div class="step-num done">3</div>
+    <div class="step-box">
+      <div class="title">Preprocessing</div>
+      <div class="detail">Image resized and normalized to the same transforms used during training (ImageNet stats, 224×224)</div>
+    </div>
+  </div>
+  <div class="arrow">▼</div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-box decision">
+      <div class="title">⚡ Stage 1 — Normal vs Pneumonia</div>
+      <div class="detail">Hugging Face Inference API call to the binary model. Threshold = 0.50 (configurable).</div>
+    </div>
+  </div>
+
+  <div class="branch">
+    <div class="branch-item">
+      <div class="arrow" style="margin-left:1rem;">├─ Normal</div>
+      <div class="arrow" style="font-size:1.1rem;">▼</div>
+      <div class="step">
+        <div class="step-num done">5a</div>
+        <div class="step-box success">
+          <div class="title">Return Normal</div>
+          <div class="detail">Subtype skipped — no pneumonia detected. Confidence and probabilities returned.</div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+      <div class="step">
+        <div class="step-num done">6a</div>
+        <div class="step-box success">
+          <div class="title">Final response — No pneumonia</div>
+        </div>
+      </div>
+    </div>
+    <div class="branch-item">
+      <div class="arrow" style="margin-left:1rem;">└─ Pneumonia</div>
+      <div class="arrow" style="font-size:1.1rem;">▼</div>
+      <div class="step">
+        <div class="step-num">5b</div>
+        <div class="step-box decision">
+          <div class="title">⚡ Stage 2 — Bacterial vs Viral</div>
+          <div class="detail">Only if Stage 1 detected pneumonia. HF Inference API call to subtype model.</div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+      <div class="step">
+        <div class="step-num done">6b</div>
+        <div class="step-box success">
+          <div class="title">Return subtype</div>
+          <div class="detail">Bacterial or Viral, with confidence and per-class probabilities.</div>
+        </div>
+      </div>
+      <div class="arrow">▼</div>
+      <div class="step">
+        <div class="step-num done">7</div>
+        <div class="step-box success">
+          <div class="title">Final response — Pneumonia + subtype</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow" style="margin-top:0.3rem;">▼</div>
+
+  <div class="step">
+    <div class="step-num done">📦</div>
+    <div class="step-box">
+      <div class="title">Structured JSON response</div>
+      <div class="detail">Primary prediction, confidence, subtype (if applicable), full probability map, model outputs, medical disclaimer</div>
+    </div>
+  </div>
+
+  <div class="response" style="margin-top:0.8rem;">{
+  <span class="key">"primary_prediction"</span>: <span class="val">"Pneumonia"</span>,
+  <span class="key">"primary_confidence"</span>: <span class="val">0.93</span>,
+  <span class="key">"subtype_prediction"</span>: <span class="val">"Bacterial Pneumonia"</span>,
+  <span class="key">"subtype_confidence"</span>: <span class="val">0.76</span>,
+  <span class="key">"probabilities"</span>: {
+    <span class="key">"Normal"</span>: <span class="val">0.07</span>,
+    <span class="key">"Pneumonia"</span>: <span class="val">0.93</span>,
+    <span class="key">"Bacterial Pneumonia"</span>: <span class="val">0.76</span>,
+    <span class="key">"Viral Pneumonia"</span>: <span class="val">0.24</span>
+  },
+  <span class="key">"disclaimer"</span>: <span class="disc">"This result is for educational support only…"</span>
+}</div>
+
+  <div style="margin-top:1rem;font-size:0.72rem;color:#7a8394;text-align:center;">
+    Optional explainability: when <span style="color:#93c5fd;">LOCAL_MODEL_PATH</span> is set, Grad-CAM runs locally
+    on the loaded checkpoint and the heatmap is returned as <span style="color:#93c5fd;">heatmap_b64</span>.
+  </div>
+
+</div>
+
+</body>
+</html>

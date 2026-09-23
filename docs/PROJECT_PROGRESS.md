@@ -402,6 +402,68 @@ Files added or updated:
 
 ### Phase 9: Final Presentation Polish
 
+Prepare the final project package. All tasks completed except screenshots, which were deferred by the user.
+
+Completed tasks:
+
+- add architecture diagram:
+    - `docs/architecture-diagram.html` — interactive dark-themed diagram showing
+      the full system: user upload → Next.js frontend (Cloudflare Pages) →
+      FastAPI backend (Docker) → Hugging Face Inference API → Stage 1 binary
+      + Stage 2 subtype → structured response; plus a training/data pipeline
+      panel (datasets, SHA256 dedup, 5,891 X-rays, 70/15/15 split, model
+      families, ensemble)
+- add workflow diagram:
+    - `docs/workflow-diagram.html` — numbered step-by-step inference flow:
+      upload → validation → preprocessing → Stage 1 (Normal vs Pneumonia) →
+      branch (Normal: return; Pneumonia: Stage 2 Bacterial vs Viral) → final
+      structured JSON response; includes the sample response shape and the
+      optional Grad-CAM explainability path
+- add limitations and future scope:
+    - `docs/LIMITATIONS.md` — 8 current limitations (not a medical device,
+      imperfect subtype performance, hosted-model dependency, dataset scope,
+      image input assumptions, no storage/audit, explainability gated, Docker
+      environment specifics) and 13 future-scope items split into near-term,
+      medium-term, and long-term
+- add demo script / run instructions:
+    - `docs/DEMO.md` — three run options (local backend + static export, Docker,
+      live Cloudflare deployment), curl examples for `/health` and `/predict`,
+      complete env var table, frontend development notes, how to reproduce
+      research results, and troubleshooting for the common failure modes
+- add final project summary:
+    - `docs/FINAL_SUMMARY.md` — what the system is, what it does, why
+      hierarchical, how it is built (dataset, models, inference layer, backend,
+      frontend, deployment), key design decisions, research results, what is not
+      shipped, what is documented, how to finish in production, and current
+      status
+
+Deferred by user:
+
+- add screenshots — intentionally not included in this commit.
+
+Verification completed:
+
+- `docs/architecture-diagram.html` — self-contained, opens in desktop preview.
+- `docs/workflow-diagram.html` — self-contained, opens in desktop preview.
+- `docs/LIMITATIONS.md` — 8 limitations, 13 future items.
+- `docs/DEMO.md` — curl-tested commands, env table, troubleshooting.
+- `docs/FINAL_SUMMARY.md` — full system summary referencing the live URL.
+
+Files added:
+
+- `docs/architecture-diagram.html` (new)
+- `docs/workflow-diagram.html` (new)
+- `docs/LIMITATIONS.md` (new)
+- `docs/DEMO.md` (new)
+- `docs/FINAL_SUMMARY.md` (new)
+
+Files updated:
+
+- `frontend/README.md` (rewritten from scaffold template to project README)
+- `docs/PROJECT_PROGRESS.md` (Phase 9 marked complete)
+
+### Phase 9: Final Presentation Polish
+
 Prepare the final project package.
 
 Tasks:
