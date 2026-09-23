@@ -30,7 +30,7 @@ networkx==3.6.1
 numpy==1.26.4
 packaging==26.0
 pandas==2.3.3
-pillow==12.1.1
+Pillow==12.1.1
 protobuf==6.33.6
 pyarrow==23.0.1
 pydeck==0.9.1

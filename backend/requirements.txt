@@ -1,0 +1,12 @@
+# Backend dependencies for the Pneumonia Detection API.
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# Inference layer dependencies
+Pillow>=10.0.0
+requests>=2.31.0
+
+# Shared project code is imported directly from the repo (src/).
+# No extra package is needed at runtime for the inference layer itself.

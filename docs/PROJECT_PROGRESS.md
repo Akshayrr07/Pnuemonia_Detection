@@ -163,21 +163,44 @@ The raw dataset is not committed to GitHub because of its size. The repository s
 
 ### Phase 4: FastAPI Backend
 
-Build the backend API around the inference layer.
+Built the production Python API around the inference layer.
 
-Tasks:
+Completed tasks:
 
-- create FastAPI app under `backend/`
-- add `/health`
-- add `/predict`
-- accept image upload
-- validate file type and size
-- open image with PIL
-- call `HierarchicalPneumoniaPipeline`
-- return structured JSON
-- add CORS configuration
-- add backend requirements
-- add local run instructions
+- created FastAPI app under `backend/app.py`
+- added `GET /health` with pipeline readiness check
+- added `POST /predict` with image upload
+- added file type validation (`image/jpeg`, `image/png`)
+- added file extension validation (`.jpg`, `.jpeg`, `.png`)
+- added file size validation via `UPLOAD_MAX_SIZE_MB`
+- opened image with PIL and forced RGB conversion
+- called `HierarchicalPneumoniaPipeline`
+- returned structured JSON matching the inference response shape
+- added CORS middleware with configurable `ALLOWED_ORIGINS`
+- added backend `requirements.txt`
+- added `backend/README.md` with local run instructions
+- added `backend/test_phase4.py` verification test
+
+Verification completed:
+
+- Python syntax compile passed.
+- All inference imports resolved with `PYTHONPATH=.`.
+- Mocked pipeline prediction returned the expected hierarchical shape.
+- FastAPI TestClient tests passed for `/health`, valid upload, bad content type, oversized file, corrupt image, and missing file.
+- `/predict` returns `503` when required environment variables are missing.
+
+Files added or updated:
+
+- `backend/app.py`
+- `backend/requirements.txt`
+- `backend/README.md`
+- `backend/test_phase4.py`
+- `requirements.txt` (clean rewrite)
+
+Current endpoint summary:
+
+- `GET /health` — returns `{"status": "ok", "pipeline_ready": true/false}`
+- `POST /predict` — accepts multipart image upload, returns the hierarchical prediction JSON
 
 ### Phase 5: Frontend Application
 
