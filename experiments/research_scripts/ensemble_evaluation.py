@@ -4,19 +4,14 @@
 # ============================================================
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import pandas as pd
 from sklearn.metrics import confusion_matrix, classification_report
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from data_pipeline import PneumoniaDataset
-from model_architectures import (
-    CustomCNN,
-    get_mobilenet,
-    get_efficientnet,
-    get_resnet18
-)
+from legacy_imports_compat import PneumoniaDataset, get_resnet18, get_mobilenet, get_efficientnet, CustomCNN
 
 
 # =========================

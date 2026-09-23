@@ -12,9 +12,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 from torchvision import transforms
 from PIL import Image
 
-# Import from your modules
-from data_pipeline import PneumoniaDataset
-from model_architectures import get_mobilenet
+from legacy_imports_compat import PneumoniaDataset, get_mobilenet
 
 
 # =========================

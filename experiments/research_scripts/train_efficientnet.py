@@ -11,9 +11,7 @@ from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, classification_report
 from torchvision import transforms
 
-# Import from your modules
-from data_pipeline import PneumoniaDataset
-from model_architectures import get_efficientnet
+from legacy_imports_compat import PneumoniaDataset, get_efficientnet
 
 
 # =========================

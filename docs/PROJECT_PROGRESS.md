@@ -356,9 +356,32 @@ Tasks:
 - Some legacy research scripts may import stale module names and should not be treated as production code.
 - Existing Streamlit app still reflects an older single-step inference prototype.
 
-Issues resolved in Phase 4 and Phase 5:
+Issues resolved in Phase 4, Phase 5, and the known-issue cleanup:
 
 - `requirements.txt` was rewritten cleanly (Phase 4).
 - Backend FastAPI app, requirements, README, and verification test were added (Phase 4).
 - Frontend Next.js app with upload, prediction, results, loading, and error states was added (Phase 5).
+- Split CSVs under `data/splits/` were normalized: Windows drive-letter paths and backslashes were replaced with portable relative, forward-slash paths (e.g. `dataset_1/train/PNEUMONIA/VIRUS-5051946-0002.jpeg`). A `data/README.md` documents the split format and the rebuild steps for the raw data.
+- A legacy-import compatibility shim (`experiments/research_scripts/legacy_imports_compat.py`) was added so the seven research scripts that still reference the old `data_pipeline` and `model_architectures` modules can run against the current `src/` layout. All seven scripts were updated to import through the shim, and `experiments/README.md` documents how to run them.
+- The Streamlit app under `app/` was rewritten to use the production `HierarchicalPneumoniaPipeline` and `InferenceSettings` from `src/inference/`, with proper hierarchical results (primary prediction, subtype only when pneumonia is detected, probabilities, disclaimer) and configuration-error handling. A `app/README.md` documents how to run it.
+- Missing-checkpoint concerns are documented in `data/README.md`, `experiments/README.md`, and `app/README.md`: the production path uses hosted Hugging Face models and does not need local `.pt` files; the legacy Streamlit app and legacy research scripts are documented as requiring checkpoints if run locally.
 
+Files added or updated during the known-issue cleanup:
+
+- `data/README.md` (new)
+- `experiments/research_scripts/legacy_imports_compat.py` (new)
+- `experiments/research_scripts/train_restnet_binary.py` (import update)
+- `experiments/research_scripts/train_resnet18.py` (import update)
+- `experiments/research_scripts/train_mobilenet.py` (import update)
+- `experiments/research_scripts/train_efficientnet.py` (import update)
+- `experiments/research_scripts/finetune_mobilenet.py` (import update)
+- `experiments/research_scripts/training_engine.py` (import update)
+- `experiments/research_scripts/ensemble_evaluation.py` (import update)
+- `experiments/README.md` (updated)
+- `app/app.py` (rewritten for hierarchical inference)
+- `app/README.md` (new)
+
+Remaining known issues:
+
+- None remaining from the original list. The four items below are resolved.
+- (Optional) Trained `.pt` checkpoints are still not in the repository. This was always expected for the hosted-model design and is documented rather than blocking. If local-model paths (e.g. Grad-CAM explainability or the legacy Streamlit app) are to be demonstrated, checkpoints must be produced or obtained first.

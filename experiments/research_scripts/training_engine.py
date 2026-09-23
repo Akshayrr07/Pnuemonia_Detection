@@ -9,9 +9,7 @@ import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, classification_report
 
-# Import from your existing modules
-from data_pipeline import PneumoniaDataset
-from model_architectures import CustomCNN
+from legacy_imports_compat import PneumoniaDataset, CustomCNN
 import pandas as pd
 
 
