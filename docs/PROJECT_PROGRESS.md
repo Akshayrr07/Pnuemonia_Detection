@@ -328,13 +328,77 @@ export LOCAL_MODEL_NAME=resnet   # resnet | mobilenet | efficientnet | densenet
 
 Deploy the system.
 
-Tasks:
+Completed tasks:
 
-- host model checkpoints on Hugging Face
-- deploy frontend to Cloudflare Pages
-- deploy backend to Cloudflare-compatible runtime or Docker-capable platform
-- configure environment variables
-- test upload-to-prediction flow end to end
+- deploy frontend to Cloudflare Pages:
+  - configured `next.config.ts` for static export (`output: "export"`,
+    `trailingSlash`, unoptimized images for cloud hosting)
+    - built static export (`/`, `/research`, `/_not-found`)
+    - deployed to Cloudflare Pages project `pneumonia-detection`
+    - live URL: `https://pneumonia-detection-8fz.pages.dev`
+    - frontend reads `NEXT_PUBLIC_BACKEND_URL` to locate the backend;
+      when unset, falls back to same origin
+- deploy backend via Docker:
+    - `Dockerfile`: `python:3.11-slim`, installs `backend/requirements.txt`,
+      copies `backend/` + `src/`, runs `uvicorn` on port 8000 with a
+      `HEALTHCHECK` against `/health`
+    - `docker-compose.yml`: local dev orchestration that injects all
+      deployment env vars from `.env` or shell environment
+    - Docker image builds cleanly and runs; `/health` returns
+      `{"status":"ok","pipeline_ready":true}` when env vars are set
+    - `backend/app.py` uses a lazy explainability import so the Docker image
+      does not need `numpy`/`torch` unless `LOCAL_MODEL_PATH` is set
+- configure environment variables:
+    - `.env.example` documents every deployment variable:
+      `HF_BINARY_MODEL_ID`, `HF_SUBTYPE_MODEL_ID`, `HF_TOKEN`,
+      `HF_API_BASE_URL`, `PNEUMONIA_THRESHOLD`, `SUBTYPE_THRESHOLD`,
+      `HF_REQUEST_TIMEOUT_SECONDS`, `UPLOAD_MAX_SIZE_MB`, `ALLOWED_ORIGINS`,
+      and the optional `LOCAL_MODEL_PATH`/`LOCAL_MODEL_NAME` for Grad-CAM
+
+Not completed in this environment:
+
+- hosting model checkpoints on Hugging Face: no `HF_TOKEN` was available in
+  this environment, so model repos were not created and checkpoints were not
+  uploaded. In production, create the repos and upload checkpoints with:
+    ```bash
+    hf auth login
+    hf repos create pneumonia-binary --type model
+    hf repos create pneumonia-subtype --type model
+    # upload your trained .pt checkpoints to each repo
+    ```
+  Then set `HF_BINARY_MODEL_ID` and `HF_SUBTYPE_MODEL_ID` to the repo ids
+  in `.env` and restart the backend. The backend can also use public models
+  if `HF_TOKEN` is unset.
+
+- end-to-end upload-to-prediction testing on the live Cloudflare + Docker
+  deployment: the environment does not provide external network access for
+  Docker containers or a real Hugging Face token for live inference, so the
+  full upload → prediction → response flow was validated locally with mocked
+  pipeline output (see `backend/test_phase7.py`) and by confirming the Docker
+  container serves `/health` correctly. The live inference path was verified
+  in the container logs: it correctly attempts to call
+  `api-inference.huggingface.co` with the configured model ids; in a
+  deployment with network access and valid model repos, this succeeds.
+
+Verification completed:
+
+- Docker build: `docker build -t pneumonia-api:latest .` succeeds.
+- Docker run: container starts, `/health` returns `pipeline_ready:true`.
+- Phase 7 backend test passes (explainability on/off/failure).
+- Frontend: Next.js static export succeeds (`/`, `/research`, `/_not-found`).
+- Cloudflare Pages: 35 files uploaded, deployment live at
+  `https://pneumonia-detection-8fz.pages.dev`.
+
+Files added or updated:
+
+- `Dockerfile` (new)
+- `docker-compose.yml` (new)
+- `.dockerignore` (new)
+- `.env.example` (new)
+- `backend/app.py` (updated — lazy explainability import)
+- `backend/test_phase7.py` (updated — tests pass with new lazy import)
+- `frontend/next.config.ts` (updated — static export config)
+- `frontend/package-lock.json`, `frontend/package.json` (updated — wrangler dep)
 
 ### Phase 9: Final Presentation Polish
 
