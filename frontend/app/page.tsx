@@ -137,10 +137,75 @@ function ResultCard({ data }: { data: PredictResponse }) {
         </div>
       </div>
 
+      {/* Explainability heatmap */}
+      {data.heatmap_b64 && <HeatmapOverlay heatmapSrc={data.heatmap_b64} />}
+
       <div className="disclaimer">
         <span className="disclaimer-icon">⚠️</span>
         <p>{data.disclaimer}</p>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Heatmap overlay component that displays a Grad-CAM heatmap
+ * composited over the original chest X-ray image.
+ */
+function HeatmapOverlay({ heatmapSrc }: { heatmapSrc: string }) {
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [heatmapLoaded, setHeatmapLoaded] = useState(false);
+
+  useEffect(() => {
+    if (heatmapSrc) {
+      const img = new Image();
+      img.onload = () => setHeatmapLoaded(true);
+      img.onerror = () => setHeatmapLoaded(false);
+      img.src = heatmapSrc;
+      return () => {
+        img.onload = null;
+        img.onerror = null;
+      };
+    }
+  }, [heatmapSrc]);
+
+  if (!heatmapSrc) {
+    return null;
+  }
+
+  return (
+    <div className="heatmap-section">
+      <div className="heatmap-header">
+        <span className="heatmap-title">Explainability Heatmap</span>
+        <label className="heatmap-toggle">
+          <input
+            type="checkbox"
+            checked={showHeatmap}
+            onChange={(e) => setShowHeatmap(e.target.checked)}
+          />
+          <span>Show heatmap</span>
+        </label>
+      </div>
+      <div className="heatmap-visual">
+        {heatmapLoaded ? (
+          <img
+            src={heatmapSrc}
+            alt="Grad-CAM heatmap overlaid on chest X-ray"
+            className={showHeatmap ? "heatmap-image" : "heatmap-image--hidden"}
+          />
+        ) : (
+          <div className="heatmap-loading">Loading heatmap...</div>
+        )}
+        {!showHeatmap && (
+          <div className="heatmap-placeholder">
+            Heatmap hidden — check the box above to reveal
+          </div>
+        )}
+      </div>
+      <p className="heatmap-caption">
+        Grad-CAM visualization highlights the regions of the X-ray that most
+        influenced the model's prediction. Red areas indicate higher importance.
+      </p>
     </div>
   );
 }

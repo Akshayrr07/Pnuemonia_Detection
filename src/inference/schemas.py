@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, Optional
-
+from typing import Dict, Optional, Tuple
 
 DEFAULT_DISCLAIMER = (
     "This result is for educational support only and is not a medical diagnosis. "
@@ -34,6 +33,7 @@ class HierarchicalPrediction:
     probabilities: Dict[str, float]
     model_outputs: Dict[str, Dict[str, object]]
     disclaimer: str = DEFAULT_DISCLAIMER
+    heatmap_b64: Optional[str] = None
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -44,5 +44,6 @@ class HierarchicalPrediction:
             "probabilities": self.probabilities,
             "model_outputs": self.model_outputs,
             "disclaimer": self.disclaimer,
+            "heatmap_b64": self.heatmap_b64,
         }
 

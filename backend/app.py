@@ -16,51 +16,82 @@ Expected environment variables (see src/inference/settings.py):
 
     UPLOAD_MAX_SIZE_MB    (optional, default 10)
     ALLOWED_ORIGINS       (optional, comma-separated CORS origins)
+
+Optional explainability (Grad-CAM) environment variables:
+    LOCAL_MODEL_PATH      path to a local .pt checkpoint (enables heatmap generation)
+    LOCAL_MODEL_NAME      model family name for Grad-CAM target layer resolution
+                          (default: resnet; supported: resnet, mobilenet, efficientnet, densenet)
 """
 
+from __future__ import annotations
+
+import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image
 from pydantic import BaseModel
+from PIL import Image
 
 from src.inference.hierarchical_pipeline import HierarchicalPneumoniaPipeline
 from src.inference.schemas import HierarchicalPrediction
 from src.inference.settings import InferenceSettings, InferenceSettingsError
+from src.inference.explainability import generate_heatmap
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-UPLOAD_MAX_SIZE_MB = int(__import__("os").getenv("UPLOAD_MAX_SIZE_MB", "10"))
+UPLOAD_MAX_SIZE_MB = int(os.getenv("UPLOAD_MAX_SIZE_MB", "10"))
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/jpg"}
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+
+# Optional explainability (Grad-CAM) configuration.
+LOCAL_MODEL_PATH = os.getenv("LOCAL_MODEL_PATH")
+LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "resnet")
+EXPLAINABILITY_ENABLED = bool(LOCAL_MODEL_PATH)
 
 # ---------------------------------------------------------------------------
 # Lifespan — build the pipeline once on startup
 # ---------------------------------------------------------------------------
 
 _pipeline: Optional[HierarchicalPneumoniaPipeline] = None
+_local_model = None
+_local_model_device = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _pipeline
+    global _pipeline, _local_model, _local_model_device
     try:
         settings = InferenceSettings.from_env()
-    except InferenceSettingsError as exc:
-        # If required env vars are missing, the app still starts but /predict
-        # will return a clear error instead of crashing the server.
+    except InferenceSettingsError:
         settings = None
 
     if settings is not None:
         _pipeline = HierarchicalPneumoniaPipeline.from_settings(settings)
 
+    # Load local model for explainability if configured.
+    if EXPLAINABILITY_ENABLED and LOCAL_MODEL_PATH:
+        try:
+            import torch
+            from src.models.model_factory import get_model
+
+            _local_model = get_model(LOCAL_MODEL_NAME, num_classes=3, freeze=False)
+            state_dict = torch.load(LOCAL_MODEL_PATH, map_location="cpu")
+            _local_model.load_state_dict(state_dict)
+            _local_model.eval()
+            _local_model_device = torch.device("cpu")
+        except Exception:
+            _local_model = None
+            _local_model_device = None
+
     yield
 
     _pipeline = None
+    _local_model = None
+    _local_model_device = None
 
 
 app = FastAPI(
@@ -117,6 +148,7 @@ class PredictResponse(BaseModel):
     probabilities: dict
     model_outputs: dict
     disclaimer: str
+    heatmap_b64: Optional[str] = None
 
 
 def _validate_upload(file: UploadFile) -> Image.Image:
@@ -167,5 +199,39 @@ async def predict(file: UploadFile = File(...)):
         )
 
     image = _validate_upload(file)
+
+    # Run the hierarchical prediction pipeline (HF hosted models).
     prediction: HierarchicalPrediction = _pipeline.predict(image)
-    return PredictResponse(**prediction.to_dict())
+
+    # Optionally generate a Grad-CAM heatmap from the local model.
+    heatmap_b64: Optional[str] = None
+    if EXPLAINABILITY_ENABLED and _local_model is not None and _local_model_device is not None:
+        try:
+            # Pick the class index we want to explain.
+            # If pneumonia is predicted, explain the Pneumonia class index (1).
+            # Otherwise explain the Normal class index (0).
+            if prediction.primary_prediction == "Pneumonia":
+                explain_class_idx = 1
+            else:
+                explain_class_idx = 0
+
+            heatmap_b64 = generate_heatmap(
+                model=_local_model,
+                model_name=LOCAL_MODEL_NAME,
+                image=image,
+                class_idx=explain_class_idx,
+                device=_local_model_device,
+            )
+        except Exception:
+            heatmap_b64 = None
+
+    return PredictResponse(
+        primary_prediction=prediction.primary_prediction,
+        primary_confidence=prediction.primary_confidence,
+        subtype_prediction=prediction.subtype_prediction,
+        subtype_confidence=prediction.subtype_confidence,
+        probabilities=prediction.probabilities,
+        model_outputs=prediction.model_outputs,
+        disclaimer=prediction.disclaimer,
+        heatmap_b64=heatmap_b64,
+    )
