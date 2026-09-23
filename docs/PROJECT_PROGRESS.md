@@ -204,19 +204,60 @@ Current endpoint summary:
 
 ### Phase 5: Frontend Application
 
-Build the React or Next.js frontend.
+Built the Next.js frontend.
 
-Tasks:
+Completed tasks:
 
-- create frontend app
-- build upload UI
-- show image preview
-- call backend `/predict`
-- show Normal/Pneumonia result
-- show subtype only when pneumonia is detected
-- show confidence/probabilities
-- show disclaimer
-- add loading and error states
+- scaffolded Next.js 16 app with TypeScript and App Router
+- built upload dropzone with click-to-upload and file input
+- added image preview with remove button and blob URL cleanup
+- called backend `/predict` with a typed fetch client
+- showed Normal/Pneumonia primary result with colored badge
+- showed subtype only when pneumonia is detected
+- displayed confidence percentages for primary and subtype
+- rendered horizontal confidence/probability bars for all labels
+- showed the medical disclaimer from the backend response
+- added loading state with progress bar and stage labels
+- added error banner with backend error detail
+- added backend connectivity indicator on mount
+- disabled prediction button when backend is unavailable
+
+Verification completed:
+
+- TypeScript compilation passed (exit 0).
+- Next.js production build passed (static page generated for `/`).
+- Removed scaffold leftovers: `page.module.css`, `favicon.ico`.
+- Blob URL lifecycle handled with `useEffect` + `useRef`.
+- React event handlers fixed (no spurious `useEffect`-return pattern).
+
+Files added or updated:
+
+- `frontend/app/page.tsx`
+- `frontend/app/layout.tsx`
+- `frontend/app/globals.css`
+- `frontend/app/lib/api.ts`
+- `frontend/app/lib/types.ts`
+- `frontend/next.config.ts`
+- `frontend/tsconfig.json`
+- `frontend/package.json`
+- `frontend/package-lock.json`
+- `frontend/eslint.config.mjs`
+- `frontend/.gitignore`
+- `frontend/public/` (Next.js static assets)
+- `frontend/README.md` (rewritten)
+- `frontend/AGENTS.md` (scaffold)
+- `frontend/CLAUDE.md` (scaffold)
+
+Run instructions:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend reads `NEXT_PUBLIC_BACKEND_URL` to locate the backend.
+When unset it falls back to the same origin.
 
 ### Phase 6: Research Results Integration
 
@@ -271,9 +312,14 @@ Tasks:
 
 ## Known Issues To Address
 
-- `requirements.txt` appears to have encoding/null-byte issues and should be rewritten cleanly.
 - Current split CSVs contain machine-specific Windows paths and should be regenerated or normalized for portability.
 - Trained `.pt` checkpoints are not present in the repository.
 - Some legacy research scripts may import stale module names and should not be treated as production code.
 - Existing Streamlit app still reflects an older single-step inference prototype.
+
+Issues resolved in Phase 4 and Phase 5:
+
+- `requirements.txt` was rewritten cleanly (Phase 4).
+- Backend FastAPI app, requirements, README, and verification test were added (Phase 4).
+- Frontend Next.js app with upload, prediction, results, loading, and error states was added (Phase 5).
 
