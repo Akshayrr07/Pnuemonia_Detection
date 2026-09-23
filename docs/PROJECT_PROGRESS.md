@@ -277,13 +277,52 @@ Tasks:
 
 Add explainability once the prediction flow is stable.
 
-Tasks:
+Completed tasks:
 
-- decide Grad-CAM execution location
-- add heatmap generation
-- return heatmap image or URL
-- show heatmap overlay in frontend
-- document limitations
+- decided Grad-CAM execution location: local-model path only, gated behind
+  `LOCAL_MODEL_PATH` env var; the Hugging Face hosted path is a black-box
+  HTTP call and cannot produce Grad-CAM heatmaps
+- added `src/inference/explainability.py` with Grad-CAM implementation for
+  resnet, mobilenet, efficientnet, and densenet
+- added heatmap generation that returns a base64 PNG data URL composited
+  over the original chest X-ray with a jet colormap
+- added optional `heatmap_b64` field to `HierarchicalPrediction` and the
+  backend `/predict` response
+- wired heatmap generation into the backend behind `LOCAL_MODEL_PATH` /
+  `LOCAL_MODEL_NAME` env vars, loaded at startup via a local `.pt` checkpoint
+- made heatmap generation non-fatal: if it fails, the prediction still returns
+  with `heatmap_b64: null`
+- added `HeatmapOverlay` component to the frontend with show/hide toggle,
+  loading state, and explanatory caption
+- added `backend/test_phase7.py` verifying explainability on, off, and
+  heatmap failure paths
+- added heatmap section styles to `globals.css`
+
+Verification completed:
+
+- TypeScript compilation passed.
+- Next.js production build passed.
+- Phase 7 backend test passed for all three scenarios:
+  explainability enabled, explainability disabled, and heatmap failure.
+
+Files added or updated:
+
+- `src/inference/explainability.py` (new)
+- `src/inference/schemas.py` (updated)
+- `backend/app.py` (updated)
+- `backend/test_phase7.py` (new)
+- `frontend/app/page.tsx` (updated)
+- `frontend/app/globals.css` (updated)
+
+Run instructions:
+
+To enable explainability locally, set the environment variables and provide a
+local checkpoint:
+
+```bash
+export LOCAL_MODEL_PATH=/path/to/model.pt
+export LOCAL_MODEL_NAME=resnet   # resnet | mobilenet | efficientnet | densenet
+```
 
 ### Phase 8: Deployment
 
