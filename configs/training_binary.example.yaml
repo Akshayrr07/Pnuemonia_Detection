@@ -1,0 +1,28 @@
+# Example configuration for Normal vs Pneumonia training.
+
+task: binary_pneumonia_detection
+seed: 42
+
+data:
+  train_csv: data/splits/train.csv
+  val_csv: data/splits/val.csv
+  test_csv: data/splits/test.csv
+  label_mode: binary
+
+model:
+  name: resnet18
+  num_classes: 2
+  pretrained: true
+  freeze_backbone: true
+
+training:
+  batch_size: 16
+  epochs: 30
+  patience: 7
+  learning_rate: 0.0001
+  use_class_weights: true
+
+output:
+  checkpoint_path: saved_models/normal_vs_pneumonia.pt
+  report_dir: reports/binary
+

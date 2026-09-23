@@ -1,6 +1,6 @@
 # ============================================================
-# PHASE 4C — TRANSFER LEARNING (EfficientNet-B0 Stage 1)
-# Frozen Backbone | CPU Safe
+# PHASE 4D — MOBILE NET V2 FINE-TUNING (Stage 2)
+# Controlled Unfreeze | CPU Safe
 # ============================================================
 
 import torch
@@ -11,9 +11,7 @@ from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, classification_report
 from torchvision import transforms
 
-# Import from your modules
-from data_pipeline import PneumoniaDataset
-from model_architectures import get_efficientnet
+from legacy_imports_compat import PneumoniaDataset, get_mobilenet
 
 
 # =========================
@@ -105,10 +103,25 @@ criterion = nn.CrossEntropyLoss(weight=class_weights)
 
 
 # ============================================================
+# FINE-TUNE MOBILE NET
+# ============================================================
+
+def get_finetuned_mobilenet(num_classes=3):
+
+    model = get_mobilenet(num_classes=num_classes, freeze=True)
+
+    # Unfreeze last feature block
+    for param in model.features[-1].parameters():
+        param.requires_grad = True
+
+    return model.to(device)
+
+
+# ============================================================
 # OPTIMIZER
 # ============================================================
 
-def get_optimizer(model, lr=1e-3):
+def get_optimizer(model, lr=1e-4):
     return torch.optim.Adam(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=lr
@@ -116,7 +129,7 @@ def get_optimizer(model, lr=1e-3):
 
 
 # ============================================================
-# TRAINING LOOP
+# TRAIN / VALIDATE
 # ============================================================
 
 def train_one_epoch(model, loader, optimizer):
@@ -173,10 +186,10 @@ def validate(model, loader):
 
 
 # ============================================================
-# TRAIN MODEL (EARLY STOPPING)
+# TRAIN MODEL
 # ============================================================
 
-def train_model(model, epochs=5, lr=1e-3):
+def train_model(model, epochs=6, lr=1e-4):
 
     optimizer = get_optimizer(model, lr)
     best_acc = 0
@@ -189,7 +202,7 @@ def train_model(model, epochs=5, lr=1e-3):
         print(f"\nEpoch {epoch+1}/{epochs}")
 
         train_loss, train_acc = train_one_epoch(model, train_loader, optimizer)
-        val_loss, val_acc, val_preds, val_labels = validate(model, val_loader)
+        val_loss, val_acc, _, _ = validate(model, val_loader)
 
         print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
         print(f"Val   Loss: {val_loss:.4f} | Val   Acc: {val_acc:.4f}")
@@ -209,14 +222,14 @@ def train_model(model, epochs=5, lr=1e-3):
 
 
 # ============================================================
-# MAIN EXECUTION
+# MAIN
 # ============================================================
 
 def main():
 
-    model = get_efficientnet(num_classes=3, freeze=True)
+    model = get_finetuned_mobilenet()
 
-    trained_model = train_model(model, epochs=5, lr=1e-3)
+    trained_model = train_model(model, epochs=6, lr=1e-4)
 
     test_loss, test_acc, test_preds, test_labels = validate(trained_model, test_loader)
 

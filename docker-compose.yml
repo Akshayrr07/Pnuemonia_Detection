@@ -1,0 +1,27 @@
+# Local Docker development for the Pneumonia Detection backend.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - HF_BINARY_MODEL_ID=${HF_BINARY_MODEL_ID:-}
+      - HF_SUBTYPE_MODEL_ID=${HF_SUBTYPE_MODEL_ID:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_API_BASE_URL=${HF_API_BASE_URL:-https://api-inference.huggingface.co/models}
+      - PNEUMONIA_THRESHOLD=${PNEUMONIA_THRESHOLD:-0.5}
+      - SUBTYPE_THRESHOLD=${SUBTYPE_THRESHOLD:-0.5}
+      - HF_REQUEST_TIMEOUT_SECONDS=${HF_REQUEST_TIMEOUT_SECONDS:-60}
+      - UPLOAD_MAX_SIZE_MB=${UPLOAD_MAX_SIZE_MB:-10}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    stop_grace_period: 10s

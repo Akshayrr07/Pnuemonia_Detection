@@ -1,18 +1,17 @@
 # ============================================================
-# PHASE 4 — TRAINING ENGINE (CPU SAFE)
+# PHASE 4C — TRANSFER LEARNING (EfficientNet-B0 Stage 1)
+# Frozen Backbone | CPU Safe
 # ============================================================
 
 import torch
 import torch.nn as nn
 import copy
-import numpy as np
+import pandas as pd
 from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, classification_report
+from torchvision import transforms
 
-# Import from your existing modules
-from data_pipeline import PneumoniaDataset
-from model_architectures import CustomCNN
-import pandas as pd
+from legacy_imports_compat import PneumoniaDataset, get_efficientnet
 
 
 # =========================
@@ -24,7 +23,7 @@ print("Using device:", device)
 
 
 # ============================================================
-# LOAD DATA AGAIN (FROM SPLITS)
+# LOAD SPLITS
 # ============================================================
 
 TRAIN_CSV = "../splits/train.csv"
@@ -50,12 +49,10 @@ test_df = test_df.rename(columns={
     "encoded_label": "label"
 })
 
-# =========================
-# TRANSFORMS (SAME AS PHASE 2)
-# =========================
 
-from torchvision import transforms
-from PIL import Image
+# ============================================================
+# TRANSFORMS
+# ============================================================
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD  = [0.229, 0.224, 0.225]
@@ -75,9 +72,10 @@ val_test_transform = transforms.Compose([
     transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
 ])
 
-# =========================
+
+# ============================================================
 # DATASETS + LOADERS
-# =========================
+# ============================================================
 
 train_dataset = PneumoniaDataset(train_df, transform=train_transform)
 val_dataset   = PneumoniaDataset(val_df, transform=val_test_transform)
@@ -89,9 +87,10 @@ train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE,
 val_loader   = torch.utils.data.DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 test_loader  = torch.utils.data.DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-# =========================
+
+# ============================================================
 # CLASS WEIGHTS
-# =========================
+# ============================================================
 
 class_counts = train_df["label"].value_counts().sort_index()
 num_samples = len(train_df)
@@ -142,10 +141,6 @@ def train_one_epoch(model, loader, optimizer):
     return running_loss / total, correct / total
 
 
-# ============================================================
-# VALIDATION LOOP
-# ============================================================
-
 def validate(model, loader):
     model.eval()
     running_loss = 0
@@ -173,18 +168,6 @@ def validate(model, loader):
             all_labels.extend(labels.cpu().numpy())
 
     return running_loss / total, correct / total, all_preds, all_labels
-
-
-# ============================================================
-# METRICS
-# ============================================================
-
-def evaluate_metrics(labels, preds):
-    cm = confusion_matrix(labels, preds)
-    print("\nConfusion Matrix:\n", cm)
-
-    print("\nClassification Report:\n")
-    print(classification_report(labels, preds))
 
 
 # ============================================================
@@ -229,7 +212,7 @@ def train_model(model, epochs=5, lr=1e-3):
 
 def main():
 
-    model = CustomCNN(num_classes=3).to(device)
+    model = get_efficientnet(num_classes=3, freeze=True)
 
     trained_model = train_model(model, epochs=5, lr=1e-3)
 
@@ -237,7 +220,10 @@ def main():
 
     print(f"\nTest Accuracy: {test_acc:.4f}")
 
-    evaluate_metrics(test_labels, test_preds)
+    print("\nConfusion Matrix:\n", confusion_matrix(test_labels, test_preds))
+
+    print("\nClassification Report:\n")
+    print(classification_report(test_labels, test_preds))
 
 
 if __name__ == "__main__":
