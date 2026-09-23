@@ -1,0 +1,17 @@
+# Build artifacts and dependencies — excluded from Docker build context
+.venv/
+.eggs/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+frontend/
+node_modules/
+.next/
+out/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

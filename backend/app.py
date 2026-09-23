@@ -37,7 +37,25 @@ from PIL import Image
 from src.inference.hierarchical_pipeline import HierarchicalPneumoniaPipeline
 from src.inference.schemas import HierarchicalPrediction
 from src.inference.settings import InferenceSettings, InferenceSettingsError
-from src.inference.explainability import generate_heatmap
+
+# Lazy import for explainability: numpy + torch are heavy and only needed when
+# LOCAL_MODEL_PATH is set. Importing them unconditionally would bloat the Docker
+# image for deployments that don't use Grad-CAM.
+_generate_heatmap = None
+
+
+def _load_explainability():
+    global _generate_heatmap
+    if _generate_heatmap is not None:
+        return _generate_heatmap
+    try:
+        from src.inference.explainability import generate_heatmap as _gm
+
+        _generate_heatmap = _gm
+    except Exception:
+        _generate_heatmap = None
+    return _generate_heatmap
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -215,7 +233,7 @@ async def predict(file: UploadFile = File(...)):
             else:
                 explain_class_idx = 0
 
-            heatmap_b64 = generate_heatmap(
+            heatmap_b64 = _load_explainability()(
                 model=_local_model,
                 model_name=LOCAL_MODEL_NAME,
                 image=image,
