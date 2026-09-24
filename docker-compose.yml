@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        INSTALL_EXPLAINABILITY: ${INSTALL_EXPLAINABILITY:-false}
     ports:
       - "8000:8000"
     environment:
@@ -18,10 +20,26 @@ services:
       - HF_REQUEST_TIMEOUT_SECONDS=${HF_REQUEST_TIMEOUT_SECONDS:-60}
       - UPLOAD_MAX_SIZE_MB=${UPLOAD_MAX_SIZE_MB:-10}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      # Optional Grad-CAM settings. The volume is opt-in and the image does not
+      # install optional explainability packages by default.
+      - LOCAL_MODEL_PATH=${LOCAL_MODEL_PATH:-}
+      - LOCAL_MODEL_NAME=${LOCAL_MODEL_NAME:-resnet}
+    volumes:
+      - ${LOCAL_MODEL_VOLUME:-./models}:/models:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      # Readiness-compatible: /health remains HTTP 200 while pipeline_ready
+      # reports whether hosted-model configuration initialized successfully.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 30s
       timeout: 5s
+      start_period: 10s
       retries: 3
     stop_grace_period: 10s

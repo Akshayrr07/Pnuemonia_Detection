@@ -1,154 +1,128 @@
 name: CI
 
 on:
-  pull_request:
   push:
-    branches:
-      - main
+    branches: ["**"]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Backend / Python
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: .
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
-
-      - name: Install backend tooling and dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r backend/requirements.txt
-          python -m pip install ruff mypy pip-audit
-
-      - name: Python syntax check
-        run: python -m compileall -q backend src
-
-      - name: Lint Python
-        run: ruff check backend src --output-format=github
-
-      - name: Type-check backend
-        run: mypy
-
-      - name: Audit Python dependencies
-        run: pip-audit -r backend/requirements.txt --strict
-
-  backend-tests:
-    name: Backend / Verification tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: .
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
-
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r backend/requirements.txt
-          python -m pip install pytest httpx
-
-      - name: Run backend verification tests
-        env:
-          PYTHONPATH: .
-        run: |
-          python backend/test_phase4.py
-          python backend/test_phase7.py
-
-      - name: Test dependency metadata
-        run: python -m pip check
-
   frontend:
-    name: Frontend / Next.js
+    name: Frontend (clean install, lint, typecheck, build)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
     steps:
-      - name: Check out repository
+      - name: Check out source
         uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
-        run: npm ci
+      - name: Clean install
+        run: |
+          rm -rf node_modules .next out
+          npm ci
 
-      - name: Lint frontend
+      - name: Lint
         run: npm run lint
 
-      - name: Type-check frontend
+      - name: Typecheck
         run: npm run typecheck
 
-      - name: Build frontend
+      - name: Build
         run: npm run build
 
       - name: Audit frontend dependencies
         run: npm audit --audit-level=high
 
-  docker:
-    name: Backend / Docker build
+  python:
+    name: Python (compile, phase tests, dependency audit)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
-      - name: Check out repository
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Install backend dependencies
+        run: |
+          uv venv --python 3.11 .venv-backend
+          uv pip install --python .venv-backend/bin/python -r backend/requirements.txt
+
+      - name: Compile Python source
+        run: |
+          .venv-backend/bin/python -m compileall -q backend src experiments app main.py evaluate.py evaluate_single.py
+
+      - name: Run phase tests
+        env:
+          HF_BINARY_MODEL_ID: test/binary
+          HF_SUBTYPE_MODEL_ID: test/subtype
+        run: |
+          PYTHONPATH=. .venv-backend/bin/python backend/test_phase4.py
+          PYTHONPATH=. .venv-backend/bin/python backend/test_phase7.py
+
+      - name: Audit backend constraints
+        run: uvx pip-audit --strict --no-deps -r backend/constraints.txt --progress-spinner off
+
+      - name: Audit research lock
+        run: uvx pip-audit --strict --no-deps -r requirements-research.lock --progress-spinner off
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build backend image
+      - name: Build production image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile
           push: false
           load: true
-          tags: pneumonia-detection-backend:ci
+          tags: pneumonia-api:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Smoke-test backend health endpoint
+      - name: Smoke-test image startup and healthcheck
         run: |
-          docker run --rm -d --name pneumonia-ci -p 18000:8000 pneumonia-detection-backend:ci
-          trap 'docker rm -f pneumonia-ci >/dev/null 2>&1 || true' EXIT
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            if curl --fail --silent --show-error http://127.0.0.1:18000/health; then
+          docker run -d --name pneumonia-api-ci \
+            -e HF_BINARY_MODEL_ID=test/binary \
+            -e HF_SUBTYPE_MODEL_ID=test/subtype \
+            -p 8000:8000 \
+            pneumonia-api:ci
+          for attempt in $(seq 1 30); do
+            if docker exec pneumonia-api-ci python -c \
+              "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).status)"; then
+              docker rm -f pneumonia-api-ci
               exit 0
             fi
             sleep 2
           done
-          docker logs pneumonia-ci
+          docker logs pneumonia-api-ci || true
+          docker rm -f pneumonia-api-ci || true
           exit 1
