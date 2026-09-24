@@ -11,8 +11,10 @@ The `CI` workflow runs for:
 - pushes to `main`;
 - manual runs from the Actions tab.
 
-The `Auto-merge` workflow runs for pull requests targeting `main` from this
-repository. Pull requests from forks still run CI, but auto-merge is skipped.
+The `Auto-merge` workflow is triggered by the `CI` workflow's `completed` event.
+It only starts when the entire CI run has concluded `success`, then finds the
+open pull request for that exact commit and enables GitHub auto-merge.
+Pull requests from forks still run CI, but auto-merge is skipped.
 
 ## Checks
 
@@ -55,7 +57,7 @@ The required status-check names are:
    default `GITHUB_TOKEN` cannot change branch protection settings.
 2. In the repository settings, enable **Allow auto-merge**.
 3. Run the **Branch protection setup** workflow from the Actions tab once.
-   It protects `main`, requires the four checks above, requires up-to-date
+   It protects `main`, requires all four checks above, requires up-to-date
    branches, requires linear history, blocks force pushes and deletion, and
    resolves conversations before merging.
 4. Open future pull requests from branches in this repository. The

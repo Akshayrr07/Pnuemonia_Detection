@@ -27,6 +27,7 @@ jobs:
           script: |
             const requiredChecks = [
               "Backend / Python",
+              "Backend / Verification tests",
               "Frontend / Next.js",
               "Backend / Docker build",
             ];
