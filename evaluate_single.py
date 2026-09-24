@@ -11,6 +11,7 @@ from sklearn.metrics import (
     roc_auc_score
 )
 
+from src.inference.checkpoint import load_trusted_checkpoint
 from src.data.dataloader import get_dataloaders
 from src.models.model_factory import get_model
 
@@ -30,7 +31,14 @@ def evaluate_model(model_name, file):
     print(f"\n===== {model_name.upper()} =====")
 
     model = get_model(model_name, num_classes=3, freeze=False)
-    model.load_state_dict(torch.load(f"saved_models/{model_name}.pt", weights_only=True))
+    model.load_state_dict(
+        load_trusted_checkpoint(
+            f"saved_models/{model_name}.pt",
+            map_location="cpu",
+            expected_task="3_class",
+        ),
+        strict=True,
+    )
     model.to(device)
     model.eval()
 
