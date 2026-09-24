@@ -15,6 +15,10 @@ Expected environment variables (see src/inference/settings.py):
     HF_REQUEST_TIMEOUT_SECONDS (optional, default 60)
 
     UPLOAD_MAX_SIZE_MB    (optional, default 10)
+    MAX_IMAGE_WIDTH       (optional, default 8192)
+    MAX_IMAGE_HEIGHT      (optional, default 8192)
+    MAX_IMAGE_PIXELS      (optional, default 40000000)
+    MAX_IMAGE_FRAMES      (optional, default 1)
     ALLOWED_ORIGINS       (optional, comma-separated CORS origins)
 
 Optional explainability (Grad-CAM) environment variables:
@@ -25,7 +29,9 @@ Optional explainability (Grad-CAM) environment variables:
 
 from __future__ import annotations
 
+import io
 import os
+import warnings
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -63,7 +69,12 @@ def _load_explainability():
 
 UPLOAD_MAX_SIZE_MB = int(os.getenv("UPLOAD_MAX_SIZE_MB", "10"))
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/jpg"}
+ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG"}
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+MAX_IMAGE_WIDTH = int(os.getenv("MAX_IMAGE_WIDTH", "8192"))
+MAX_IMAGE_HEIGHT = int(os.getenv("MAX_IMAGE_HEIGHT", "8192"))
+MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "40000000"))
+MAX_IMAGE_FRAMES = int(os.getenv("MAX_IMAGE_FRAMES", "1"))
 
 # Optional explainability (Grad-CAM) configuration.
 LOCAL_MODEL_PATH = os.getenv("LOCAL_MODEL_PATH")
@@ -169,6 +180,32 @@ class PredictResponse(BaseModel):
     heatmap_b64: Optional[str] = None
 
 
+def _read_bounded_upload(file: UploadFile, max_bytes: int) -> bytes:
+    """Read at most ``max_bytes + 1`` and reject one byte beyond the cap."""
+    if max_bytes < 0:
+        raise ValueError("max_bytes must be non-negative")
+
+    chunks: list[bytes] = []
+    remaining = max_bytes + 1
+    while remaining > 0:
+        chunk = file.file.read(min(1024 * 1024, remaining))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+
+    contents = b"".join(chunks)
+    if len(contents) > max_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Image too large: {len(contents) / (1024 * 1024):.2f} MB "
+                f"(max {UPLOAD_MAX_SIZE_MB} MB)."
+            ),
+        )
+    return contents
+
+
 def _validate_upload(file: UploadFile) -> Image.Image:
     """Validate type/size and return an opened RGB PIL Image."""
     if not file.content_type or file.content_type not in ALLOWED_IMAGE_TYPES:
@@ -180,29 +217,68 @@ def _validate_upload(file: UploadFile) -> Image.Image:
             ),
         )
 
-    contents = file.file.read()
-    size_mb = len(contents) / (1024 * 1024)
-    if size_mb > UPLOAD_MAX_SIZE_MB:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Image too large: {size_mb:.2f} MB (max {UPLOAD_MAX_SIZE_MB} MB).",
-        )
+    # Content length is advisory; always enforce the byte cap against bytes
+    # actually read from the stream, since the request can be mislabeled.
+    max_upload_bytes = UPLOAD_MAX_SIZE_MB * 1024 * 1024
+    contents = _read_bounded_upload(file, max_upload_bytes)
 
-    ext = __import__("os").path.splitext(file.filename or "")[1].lower()
+    ext = os.path.splitext(file.filename or "")[1].lower()
     if ext and ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported extension: {ext or 'none'}. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
         )
 
+    # Read metadata and validate it before loading pixel data. Keep the warning
+    # policy scoped to this operation so a decompression-bomb warning cannot
+    # be silently ignored by a process-wide warning filter.
     try:
-        image = Image.open(__import__("io").BytesIO(contents))
-        image.load()  # force decode so we fail early on corrupt data
-        image = image.convert("RGB")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(contents)) as image:
+                actual_format = image.format
+                if actual_format not in ALLOWED_IMAGE_FORMATS:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Unsupported image format: {actual_format or 'unknown'}. "
+                            f"Allowed: {', '.join(sorted(ALLOWED_IMAGE_FORMATS))}"
+                        ),
+                    )
+
+                width, height = image.size
+                if (
+                    width > MAX_IMAGE_WIDTH
+                    or height > MAX_IMAGE_HEIGHT
+                    or width * height > MAX_IMAGE_PIXELS
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Image dimensions exceed limit: {width}x{height} "
+                            f"(max {MAX_IMAGE_WIDTH}x{MAX_IMAGE_HEIGHT}, "
+                            f"{MAX_IMAGE_PIXELS} pixels)."
+                        ),
+                    )
+
+                frame_count = getattr(image, "n_frames", 1)
+                if frame_count > MAX_IMAGE_FRAMES:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Multi-frame images are not supported "
+                            f"({frame_count} frames; max {MAX_IMAGE_FRAMES})."
+                        ),
+                    )
+
+                image.load()  # force decode so we fail early on corrupt data
+                return image.convert("RGB")
+    except HTTPException:
+        raise
+    except (Image.DecompressionBombWarning, Image.DecompressionBombError) as exc:
+        raise HTTPException(status_code=400, detail=f"Could not decode image: {exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not decode image: {exc}") from exc
-
-    return image
 
 
 @app.post("/predict", response_model=PredictResponse, tags=["Prediction"])

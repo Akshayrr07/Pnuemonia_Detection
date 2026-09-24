@@ -136,6 +136,12 @@ If pneumonia is not detected, `subtype_prediction` and `subtype_confidence` are 
 - Accepted content types: `image/jpeg`, `image/png`, `image/jpg`.
 - Accepted file extensions: `.jpg`, `.jpeg`, `.png`.
 - Uploads exceeding `UPLOAD_MAX_SIZE_MB` are rejected.
+- Image dimensions must not exceed `MAX_IMAGE_WIDTH` × `MAX_IMAGE_HEIGHT`, and
+  total pixels must not exceed `MAX_IMAGE_PIXELS` (defaults: 8192 × 8192 and
+  40,000,000 pixels).
+- Decoded images must be PNG or JPEG, even when the filename/content type says
+  otherwise. Only single-frame images are accepted.
+- Pillow decompression-bomb warnings and errors are rejected before inference.
 - Corrupt or undecodable images are rejected with a `400` error.
 
 ### Errors
