@@ -225,19 +225,28 @@ async def predict(file: UploadFile = File(...)):
     heatmap_b64: Optional[str] = None
     if EXPLAINABILITY_ENABLED and _local_model is not None and _local_model_device is not None:
         try:
-            # Pick the class index we want to explain.
-            # If pneumonia is predicted, explain the Pneumonia class index (1).
-            # Otherwise explain the Normal class index (0).
-            if prediction.primary_prediction == "Pneumonia":
-                explain_class_idx = 1
+            # Local checkpoints are three-class models, so only explain a
+            # concrete Normal/Bacterial/Viral class. The binary pipeline's
+            # aggregate "Pneumonia" result has no corresponding local output.
+            if prediction.primary_prediction == "Normal":
+                explain_class_name = "Normal"
+            elif prediction.subtype_prediction in {
+                "Bacterial Pneumonia",
+                "Viral Pneumonia",
+            }:
+                explain_class_name = prediction.subtype_prediction
             else:
-                explain_class_idx = 0
+                raise ValueError(
+                    "Cannot explain aggregate Pneumonia without a concrete subtype"
+                )
+
+            from src.inference.explainability import grad_cam_class_index
 
             heatmap_b64 = _load_explainability()(
                 model=_local_model,
                 model_name=LOCAL_MODEL_NAME,
                 image=image,
-                class_idx=explain_class_idx,
+                class_idx=grad_cam_class_index(explain_class_name),
                 device=_local_model_device,
             )
         except Exception:

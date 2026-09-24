@@ -38,6 +38,31 @@ _LOCK = threading.Lock()
 _MEAN = [0.485, 0.456, 0.406]
 _STD = [0.229, 0.224, 0.225]
 
+# Local checkpoints produced by this repository use the dataset registry's
+# three-class encoding. There is no aggregate "Pneumonia" output class.
+_GRAD_CAM_CLASS_TO_INDEX = {
+    "Normal": 0,
+    "Bacterial Pneumonia": 1,
+    "Viral Pneumonia": 2,
+}
+
+
+def grad_cam_class_index(class_name: str) -> int:
+    """Return the local three-class checkpoint index for *class_name*.
+
+    Aggregate binary output ``"Pneumonia"`` is intentionally unsupported: the
+    checkpoint has separate bacterial and viral classes, not a Pneumonia class.
+    """
+    try:
+        return _GRAD_CAM_CLASS_TO_INDEX[class_name]
+    except KeyError as exc:
+        raise ValueError(
+            "Grad-CAM requires a concrete local checkpoint class "
+            f"(one of {tuple(_GRAD_CAM_CLASS_TO_INDEX)}), not aggregate Pneumonia: "
+            f"{class_name!r}"
+        ) from exc
+
+
 # ---------------------------------------------------------------------------
 # Target layer resolution for known model families
 # ---------------------------------------------------------------------------
@@ -108,42 +133,56 @@ def generate_heatmap(
 
     Returns None when Grad-CAM fails for any reason.
     """
-    import torchvision.transforms as T
-
-    tensor, original_size = _preprocess(image)
-    tensor = tensor.to(device)
-
-    target_layer = resolve_target_layer(model, model_name)
-
-    activation: Optional["torch.Tensor"] = None
-    gradient: Optional["torch.Tensor"] = None
-
-    def forward_hook(module, inp, out):
-        nonlocal activation
-        activation = out.detach()
-
-    def backward_hook(module, grad_in, grad_out):
-        nonlocal gradient
-        gradient = grad_out[0].detach()
-
-    handle_f = target_layer.register_forward_hook(forward_hook)
-    handle_b = target_layer.register_full_backward_hook(backward_hook)
-
     try:
-        model.zero_grad()
-        model.eval()
+        import torch
 
-        scores = model(tensor)
-        score = scores[0, class_idx]
-        score.backward()
+        tensor, original_size = _preprocess(image)
+        tensor = tensor.to(device)
 
-        if activation is None or gradient is None:
-            return None
+        with _LOCK:
+            target_layer = resolve_target_layer(model, model_name)
 
-        weights = gradient.mean(dim=(2, 3), keepdim=True)
-        cam = (weights * activation).sum(dim=1, keepdim=True)
-        cam = torch.relu(cam)
-        cam = cam.squeeze().cpu().numpy()
+            activation: Optional["torch.Tensor"] = None
+            gradient: Optional["torch.Tensor"] = None
+            previous_mode = None
+
+            def forward_hook(module, inp, out):
+                nonlocal activation
+                activation = out.detach()
+
+            def backward_hook(module, grad_in, grad_out):
+                nonlocal gradient
+                gradient = grad_out[0].detach()
+
+            handle_f = None
+            handle_b = None
+            try:
+                handle_f = target_layer.register_forward_hook(forward_hook)
+                handle_b = target_layer.register_full_backward_hook(backward_hook)
+
+                tensor.requires_grad_(True)
+                model.zero_grad()
+                previous_mode = model.training
+                model.eval()
+
+                scores = model(tensor)
+                score = scores[0, class_idx]
+                score.backward()
+
+                if activation is None or gradient is None:
+                    return None
+
+                weights = gradient.mean(dim=(2, 3), keepdim=True)
+                cam = (weights * activation).sum(dim=1, keepdim=True)
+                cam = torch.relu(cam)
+                cam = cam.squeeze().cpu().numpy()
+            finally:
+                if previous_mode is not None:
+                    model.train(previous_mode)
+                if handle_b is not None:
+                    handle_b.remove()
+                if handle_f is not None:
+                    handle_f.remove()
 
         if cam.size == 0:
             return None
@@ -169,10 +208,6 @@ def generate_heatmap(
 
     except Exception:
         return None
-
-    finally:
-        handle_f.remove()
-        handle_b.remove()
 
 
 def _overlay_heatmap(heatmap_pil: Image.Image, original_pil: Image.Image, alpha: float = 0.5) -> Image.Image:
