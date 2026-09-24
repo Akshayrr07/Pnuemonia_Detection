@@ -75,8 +75,14 @@ def main() -> None:
     backend_module._local_model = object()
     backend_module._local_model_device = "cpu"
 
+    explainability_calls = []
+
+    def fake_heatmap(**kwargs):
+        explainability_calls.append(kwargs)
+        return "data:image/png;base64,PHASE7"
+
     with patch.object(
-        backend_module, "_load_explainability", return_value=lambda **kwargs: "data:image/png;base64,PHASE7"
+        backend_module, "_load_explainability", return_value=fake_heatmap
     ) as mock1:
         client = TestClient(backend_module.app)
         r = client.get("/health")
@@ -91,7 +97,21 @@ def main() -> None:
         assert body["primary_prediction"] == "Pneumonia"
         assert body["heatmap_b64"] == "data:image/png;base64,PHASE7", f"got {body['heatmap_b64']!r}"
         assert mock1.call_count == 1
+        assert explainability_calls[0]["class_idx"] == 1
         print("/predict with explainability: PASS")
+
+    backend_module._pipeline.predict = lambda image: make_fake_prediction(
+        primary="Pneumonia",
+        subtype="Viral Pneumonia",
+    )
+    with patch.object(backend_module, "_load_explainability", return_value=fake_heatmap):
+        client = TestClient(backend_module.app)
+        img = Image.new("RGB", (224, 224), color=(100, 110, 120))
+        buf = io.BytesIO(); img.save(buf, format="PNG"); buf.seek(0)
+        r = client.post("/predict", files={"file": ("viral.png", buf, "image/png")})
+        assert r.status_code == 200
+        assert explainability_calls[-1]["class_idx"] == 2
+        print("/predict viral subtype maps to Grad-CAM index 2: PASS")
 
     # Test 2: explainability disabled (no local model set → _load_explainability not called)
     backend_module._local_model = None
