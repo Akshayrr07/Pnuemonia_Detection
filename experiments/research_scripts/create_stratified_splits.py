@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 # CONFIGURATION
 # =========================
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 METADATA_PATH = os.path.join(BASE_DIR, "data", "metadata", "master_registry.csv")
 SPLITS_DIR = os.path.join(BASE_DIR, "data", "splits")

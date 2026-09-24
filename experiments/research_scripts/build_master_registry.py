@@ -9,7 +9,7 @@ from tqdm import tqdm
 # CONFIGURATION
 # =========================
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 RAW_DATASETS_DIR = os.path.join(BASE_DIR, "data", "raw_datasets")
 METADATA_DIR = os.path.join(BASE_DIR, "data", "metadata")

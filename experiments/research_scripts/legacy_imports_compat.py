@@ -13,8 +13,10 @@
 
 import importlib
 import sys
-import torch.nn as nn
 from pathlib import Path
+
+import torch
+import torch.nn as nn
 
 _HERE = Path(__file__).resolve().parent
 _PROJECT_ROOT = _HERE.parent.parent
@@ -50,7 +52,33 @@ _models = _import_from_src("models.model_factory")
 
 
 # Redirect the exact names the legacy scripts expect.
-PneumoniaDataset = _data.PneumoniaDataset
+
+
+class PneumoniaDataset(_data.PneumoniaDataset):
+    """Accept both CSV paths and the renamed DataFrames used by legacy scripts."""
+
+    def __init__(self, csv_path_or_dataframe, transform=None):
+        import pandas as pd
+
+        if isinstance(csv_path_or_dataframe, pd.DataFrame):
+            dataframe = csv_path_or_dataframe.copy()
+            dataframe = dataframe.rename(
+                columns={
+                    "original_path": "image_path",
+                    "encoded_label": "label",
+                }
+            )
+        else:
+            dataframe = pd.read_csv(csv_path_or_dataframe)
+            dataframe = dataframe.rename(
+                columns={
+                    "original_path": "image_path",
+                    "encoded_label": "label",
+                }
+            )
+
+        self.df = dataframe
+        self.transform = transform
 
 CustomCNN = getattr(_models, "CustomCNN", None)
 if CustomCNN is None:
