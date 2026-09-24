@@ -11,6 +11,7 @@ downloads/
 eggs/
 .eggs/
 # Source code is tracked even when a directory is named `lib`.
+# Root-level Python build output only; application directories named lib are tracked.
 /lib/
 /lib64/
 parts/

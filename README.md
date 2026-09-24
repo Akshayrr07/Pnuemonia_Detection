@@ -190,3 +190,4 @@ This project is for educational and research purposes. It is not a certified med
 - [Research Summary](docs/RESEARCH_SUMMARY.md)
 - [Deployment Notes](docs/DEPLOYMENT.md)
 - [Project Progress](docs/PROJECT_PROGRESS.md)
+- [CI and pull-request automation](docs/CI.md)

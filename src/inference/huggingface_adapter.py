@@ -70,13 +70,13 @@ def _prediction_from_scores(
             continue
 
         label = _normalize_label(str(raw_label), label_map)
-        score = float(raw_score)
+        score = float(str(raw_score))
         probabilities[label] = max(probabilities.get(label, 0.0), score)
 
     if not probabilities:
         raise HuggingFaceInferenceError("Hugging Face response did not include class scores")
 
-    top_label = max(probabilities, key=probabilities.get)
+    top_label = max(probabilities, key=lambda label: probabilities[label])
     return ModelPrediction(
         label=top_label,
         confidence=probabilities[top_label],
