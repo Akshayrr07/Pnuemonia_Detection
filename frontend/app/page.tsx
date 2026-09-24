@@ -1,9 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { healthCheck, predict } from "./lib/api";
 import type { PredictResponse } from "./lib/types";
+
+const FILE_INPUT_ID = "chest-xray-file";
+const ACCEPTED_FILE_TYPES = ["image/jpeg", "image/png", "image/jpg"];
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * The API client may gain AbortSignal support independently of this UI. Keep the
+ * optional third argument type-safe while allowing the current two-argument
+ * implementation to ignore it at runtime until that client lands.
+ */
+type PredictWithOptionalSignal = (
+  file: File,
+  onProgress?: (progress: number, stage: string) => void,
+  signal?: AbortSignal
+) => Promise<PredictResponse>;
 
 /**
  * Simple progress bar component.
@@ -15,10 +30,22 @@ function ProgressBar({
   value: number;
   label: string;
 }) {
+  const boundedValue = Math.min(100, Math.max(0, Math.round(value)));
+
   return (
-    <div className="progress">
-      <div className="progress-track">
-        <div className="progress-fill" style={{ width: `${value}%` }} />
+    <div
+      className="progress"
+      role="progressbar"
+      aria-label="Prediction progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={boundedValue}
+      aria-valuetext={label || "Prediction in progress"}
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div className="progress-track" aria-hidden="true">
+        <div className="progress-fill" style={{ width: `${boundedValue}%` }} />
       </div>
       <div className="progress-label">{label}</div>
     </div>
@@ -204,7 +231,7 @@ function HeatmapOverlay({ heatmapSrc }: { heatmapSrc: string }) {
       </div>
       <p className="heatmap-caption">
         Grad-CAM visualization highlights the regions of the X-ray that most
-        influenced the model's prediction. Red areas indicate higher importance.
+        influenced the model&apos;s prediction. Red areas indicate higher importance.
       </p>
     </div>
   );
@@ -217,11 +244,18 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
+  const [statusMessage, setStatusMessage] = useState(
+    "Choose a chest X-ray image to begin."
+  );
   const [error, setError] = useState<string | null>(null);
   const [pipelineReady, setPipelineReady] = useState<boolean | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  /** Track the current blob URL so we can revoke it on unmount or replacement. */
   const previewUrlRef = useRef<string | null>(null);
+  const activeRequestIdRef = useRef(0);
+  const requestControllerRef = useRef<AbortController | null>(null);
+  const loadingRef = useRef(false);
+  const fileRef = useRef<File | null>(null);
 
   /**
    * Revoke the current blob URL when the preview is replaced or the component
@@ -237,17 +271,6 @@ export default function Home() {
   }, []);
 
   /**
-   * Report progress from the predict() call back into our label state.
-   */
-  const onProgress = useCallback(
-    (value: number, stage: string) => {
-      setProgress(value);
-      setProgressLabel(stage);
-    },
-    []
-  );
-
-  /**
    * Check backend health on mount.
    */
   useEffect(() => {
@@ -257,75 +280,230 @@ export default function Home() {
   }, []);
 
   /**
-   * Handle file selection from the file input.
+   * Cancel any in-flight prediction when the page is left.
+   */
+  useEffect(() => {
+    return () => {
+      activeRequestIdRef.current++;
+      requestControllerRef.current?.abort();
+    };
+  }, []);
+
+  /**
+   * Reset the native file input so selecting the same file again fires a new
+   * change event after an invalid selection or removal.
+   */
+  function resetFileInput() {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  /**
+   * Invalidate callbacks from a superseded request and cancel its network work
+   * when the API client supports AbortSignal.
+   */
+  function invalidateActiveRequest() {
+    activeRequestIdRef.current += 1;
+    requestControllerRef.current?.abort();
+    requestControllerRef.current = null;
+  }
+
+  function cancelActiveRequest() {
+    invalidateActiveRequest();
+    loadingRef.current = false;
+    setLoading(false);
+  }
+
+  function clearSelectedFile() {
+    cancelActiveRequest();
+    fileRef.current = null;
+    setFile(null);
+    setResult(null);
+    setError(null);
+    setProgress(0);
+    setProgressLabel("");
+    setStatusMessage("No image selected.");
+
+    const current = previewUrlRef.current;
+    previewUrlRef.current = null;
+    setPreview(null);
+    if (current) {
+      // Defer revocation so the img element has unloaded the src.
+      requestAnimationFrame(() => URL.revokeObjectURL(current));
+    }
+    resetFileInput();
+  }
+
+  function validateSelectedFile(selected: File): string | null {
+    if (!ACCEPTED_FILE_TYPES.includes(selected.type)) {
+      return `Unsupported file type: ${selected.type || "unknown"}. Please upload a JPG or PNG image.`;
+    }
+    if (selected.size > MAX_FILE_SIZE_BYTES) {
+      return `File too large: ${(selected.size / 1024 / 1024).toFixed(2)} MB. Maximum is 10 MB.`;
+    }
+    return null;
+  }
+
+  /**
+   * Apply a file from either the native picker or a real drop event.
+   */
+  function applySelectedFile(selected: File) {
+    if (loadingRef.current) {
+      resetFileInput();
+      return;
+    }
+
+    const validationError = validateSelectedFile(selected);
+    if (validationError) {
+      clearSelectedFile();
+      setError(validationError);
+      setStatusMessage(validationError);
+      return;
+    }
+
+    cancelActiveRequest();
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
+
+    const nextPreview = URL.createObjectURL(selected);
+    previewUrlRef.current = nextPreview;
+    fileRef.current = selected;
+    setFile(selected);
+    setError(null);
+    setResult(null);
+    setProgress(0);
+    setProgressLabel("");
+    setPreview(nextPreview);
+    setStatusMessage(`Selected ${selected.name}. Review the preview, then analyze the image.`);
+  }
+
+  /**
+   * Handle file selection from the native file input.
    */
   function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
     if (!selected) {
       return;
     }
-
-    const acceptedTypes = ["image/jpeg", "image/png", "image/jpg"];
-    if (!acceptedTypes.includes(selected.type)) {
-      setError(
-        `Unsupported file type: ${selected.type}. Please upload a JPG or PNG image.`
-      );
-      setFile(null);
-      setPreview(null);
-      return;
-    }
-
-    if (selected.size > 10 * 1024 * 1024) {
-      setError(
-        `File too large: ${(selected.size / 1024 / 1024).toFixed(2)} MB. Maximum is 10 MB.`
-      );
-      setFile(null);
-      setPreview(null);
-      return;
-    }
-
-    // Revoke the previously painted object URL so we do not leak blobs.
-    if (previewUrlRef.current && previewUrlRef.current !== preview) {
-      URL.revokeObjectURL(previewUrlRef.current);
-    }
-
-    previewUrlRef.current = URL.createObjectURL(selected);
-    setFile(selected);
-    setError(null);
-    setResult(null);
-    setPreview(previewUrlRef.current);
+    applySelectedFile(selected);
   }
 
-  /**
-   * Trigger file picker.
-   */
-  function onUploadClick() {
-    fileInputRef.current?.click();
+  function onDragEnter(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (
+      !loadingRef.current &&
+      Array.from(event.dataTransfer.types).includes("Files")
+    ) {
+      setIsDragging(true);
+      setStatusMessage("Release the image to upload it.");
+    }
+  }
+
+  function onDragOver(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (!loadingRef.current) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+  }
+
+  function onDragLeave(event: React.DragEvent<HTMLDivElement>) {
+    if (
+      event.relatedTarget instanceof Node &&
+      event.currentTarget.contains(event.relatedTarget)
+    ) {
+      return;
+    }
+    setIsDragging(false);
+    if (!loadingRef.current) {
+      setStatusMessage(
+        fileRef.current
+          ? "Image selection unchanged."
+          : "Choose a chest X-ray image to begin."
+      );
+    }
+  }
+
+  function onDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+    if (loadingRef.current) {
+      return;
+    }
+    const selected = event.dataTransfer.files?.[0];
+    if (!selected) {
+      setStatusMessage("No image was dropped.");
+      return;
+    }
+    applySelectedFile(selected);
   }
 
   /**
    * Submit the selected file to the backend.
    */
   async function onPredict() {
-    if (!file) {
+    const selectedFile = fileRef.current;
+    if (!selectedFile || loadingRef.current) {
       return;
     }
 
+    cancelActiveRequest();
+    const requestId = activeRequestIdRef.current;
+    const requestController = new AbortController();
+    requestControllerRef.current = requestController;
+    loadingRef.current = true;
     setLoading(true);
     setError(null);
     setProgress(0);
     setProgressLabel("Starting...");
+    setStatusMessage("Starting prediction.");
+
+    const onProgress = (value: number, stage: string) => {
+      if (requestId !== activeRequestIdRef.current) {
+        return;
+      }
+      setProgress(value);
+      setProgressLabel(stage);
+      setStatusMessage(stage);
+    };
 
     try {
-      const data = await predict(file, onProgress);
+      // The current API client remains contract-compatible with two arguments;
+      // the optional signal is forwarded when the cancellable client is merged.
+      const cancellablePredict = predict as unknown as PredictWithOptionalSignal;
+      const data = await cancellablePredict(
+        selectedFile,
+        onProgress,
+        requestController.signal
+      );
+      if (
+        requestId !== activeRequestIdRef.current ||
+        requestController.signal.aborted
+      ) {
+        return;
+      }
       setResult(data);
       setProgress(100);
       setProgressLabel("Complete");
+      setStatusMessage("Prediction complete.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Prediction failed");
+      if (
+        requestId !== activeRequestIdRef.current ||
+        requestController.signal.aborted
+      ) {
+        return;
+      }
+      const message = err instanceof Error ? err.message : "Prediction failed";
+      setError(message);
       setResult(null);
+      setStatusMessage(message);
     } finally {
-      setLoading(false);
+      if (requestId === activeRequestIdRef.current) {
+        requestControllerRef.current = null;
+        loadingRef.current = false;
+        setLoading(false);
+      }
     }
   }
 
@@ -333,19 +511,7 @@ export default function Home() {
    * Remove the current file and preview.
    */
   function onRemove() {
-    setFile(null);
-    setResult(null);
-    setError(null);
-    setProgress(0);
-    setProgressLabel("");
-
-    const current = previewUrlRef.current;
-    if (current) {
-      previewUrlRef.current = null;
-      setPreview(null);
-      // Defer revocation so the img element has unloaded the src.
-      requestAnimationFrame(() => URL.revokeObjectURL(current));
-    }
+    clearSelectedFile();
   }
 
   return (
@@ -360,7 +526,12 @@ export default function Home() {
       </header>
 
       {/* Health / connectivity indicator */}
-      <div className="connectivity">
+      <div
+        className="connectivity"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {pipelineReady === null ? (
           <span className="connectivity-status connectivity-status--checking">
             Checking backend...
@@ -378,55 +549,98 @@ export default function Home() {
       </div>
 
       {/* Upload area */}
-      <section className="upload-section">
+      <section className="upload-section" aria-labelledby="upload-heading">
+        <h2 id="upload-heading" className="visually-hidden">
+          Upload a chest X-ray
+        </h2>
         <div
-          className={`dropzone ${file ? "dropzone--filled" : ""}`}
-          onClick={onUploadClick}
-          role="button"
-          tabIndex={0}
+          className={`dropzone ${file ? "dropzone--filled" : ""} ${isDragging ? "dropzone--dragging" : ""}`}
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          aria-disabled={loading}
         >
-          {preview ? (
-            <div className="preview-wrapper">
-              <img className="preview-image" src={preview} alt="Uploaded X-ray" />
-              <button
-                className="remove-button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove();
-                }}
-                type="button"
-              >
-                Remove
-              </button>
-            </div>
-          ) : (
-            <>
-              <span className="dropzone-icon">📤</span>
-              <span className="dropzone-text">
-                Click or drag a chest X-ray image here
-              </span>
-              <span className="dropzone-hint">
-                JPG, JPEG, or PNG — up to 10 MB
-              </span>
-            </>
-          )}
+          <label className="dropzone-label" htmlFor={FILE_INPUT_ID}>
+            {preview ? (
+              <img
+                className="preview-image"
+                src={preview}
+                alt="Uploaded X-ray preview"
+              />
+            ) : (
+              <>
+                <span
+                  className="dropzone-icon"
+                  aria-hidden="true"
+                >
+                  📤
+                </span>
+                <span className="dropzone-text">
+                  {loading
+                    ? "Analyzing selected image..."
+                    : "Choose or drop a chest X-ray image here"}
+                </span>
+                <span className="dropzone-hint">
+                  JPG, JPEG, or PNG — up to 10 MB
+                </span>
+              </>
+            )}
+          </label>
           <input
             ref={fileInputRef}
+            id={FILE_INPUT_ID}
             type="file"
             accept="image/jpeg,image/png,image/jpg"
             onChange={onFileChange}
             className="file-input"
             disabled={loading}
+            aria-label="Chest X-ray image"
+            aria-busy={loading}
+            aria-describedby="upload-help upload-privacy"
           />
+          <span id="upload-help" className="visually-hidden">
+            Use the file picker or drag and drop. Supported formats are JPG, JPEG,
+            and PNG, with a maximum size of 10 megabytes.
+          </span>
+          {preview && (
+            <button
+              className="remove-button"
+              onClick={onRemove}
+              type="button"
+              disabled={loading}
+              aria-label="Remove selected image"
+            >
+              Remove
+            </button>
+          )}
         </div>
 
-        {error && <div className="error-banner">{error}</div>}
+        <div
+          id="upload-status"
+          className="visually-hidden"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {statusMessage}
+        </div>
+        {error && (
+          <div
+            className="error-banner"
+            role="alert"
+            aria-live="assertive"
+          >
+            {error}
+          </div>
+        )}
 
         {file && !loading && !result && (
           <button
             className="predict-button"
             onClick={onPredict}
             disabled={pipelineReady === false}
+            aria-describedby="upload-status"
           >
             Analyze Image
           </button>
@@ -436,6 +650,7 @@ export default function Home() {
           <>
             <button
               className="predict-button predict-button--disabled"
+              type="button"
               disabled
             >
               Analyzing...
@@ -443,6 +658,22 @@ export default function Home() {
             <ProgressBar value={progress} label={progressLabel} />
           </>
         )}
+
+        <aside
+          id="upload-privacy"
+          className="privacy-notice"
+          aria-label="Privacy and data transfer"
+        >
+          <h2 className="privacy-title">Privacy and data transfer</h2>
+          <p>
+            When you choose <strong>Analyze Image</strong>, the image is sent from
+            your browser to this application&apos;s configured backend. The backend
+            is designed to process requests without persistently storing the image
+            or prediction, but configured third-party model services may apply
+            their own retention and processing terms. Do not upload
+            patient-identifiable images or protected health information.
+          </p>
+        </aside>
       </section>
 
       {/* Result */}
