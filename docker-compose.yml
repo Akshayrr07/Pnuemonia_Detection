@@ -9,6 +9,7 @@ services:
       - "8000:8000"
     environment:
       - PYTHONPATH=/app
+      - APP_ENV=${APP_ENV:-development}
       - HF_BINARY_MODEL_ID=${HF_BINARY_MODEL_ID:-}
       - HF_SUBTYPE_MODEL_ID=${HF_SUBTYPE_MODEL_ID:-}
       - HF_TOKEN=${HF_TOKEN:-}
@@ -17,10 +18,12 @@ services:
       - SUBTYPE_THRESHOLD=${SUBTYPE_THRESHOLD:-0.5}
       - HF_REQUEST_TIMEOUT_SECONDS=${HF_REQUEST_TIMEOUT_SECONDS:-60}
       - UPLOAD_MAX_SIZE_MB=${UPLOAD_MAX_SIZE_MB:-10}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      # Keep unset empty so APP_ENV=production denies CORS by default; the
+      # application supplies explicit localhost origins in development.
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import json, urllib.request; body=json.load(urllib.request.urlopen('http://localhost:8000/ready')); raise SystemExit(0 if body.get('pipeline_ready') is True else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
