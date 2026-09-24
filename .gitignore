@@ -10,7 +10,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-# Ignore Python build artifacts without hiding source directories named lib.
+# Root-level Python build output only; application directories named lib are tracked.
 /lib/
 /lib64/
 parts/
