@@ -8,10 +8,10 @@ build/
 develop-eggs/
 dist/
 downloads/
-eggs/
-.eggs/
-lib/
-lib64/
+/.eggs/
+# Root-level Python build output only; application directories named lib are tracked.
+/lib/
+/lib64/
 parts/
 sdist/
 var/
