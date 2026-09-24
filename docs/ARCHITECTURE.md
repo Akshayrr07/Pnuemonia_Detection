@@ -42,7 +42,7 @@ The production path should use `src/` for reusable data, model, training, evalua
 
 ## Hierarchical Prediction Flow
 
-The intended inference pipeline is hierarchical:
+The implemented inference pipeline is hierarchical:
 
 ```text
 Input chest X-ray
@@ -71,7 +71,7 @@ This design matches the observed model behavior from experimentation. Normal-vs-
 
 ## Backend Responsibilities
 
-The Python backend should provide:
+The FastAPI backend provides:
 
 - `/health` endpoint for availability checks
 - `/predict` endpoint for chest X-ray upload
@@ -103,14 +103,14 @@ Example response shape:
 
 ## Model-Serving Layer
 
-Model checkpoints are intended to be hosted and managed through Hugging Face. This keeps the application lightweight and separates model lifecycle management from the user-facing web app.
+Model checkpoints are hosted and managed through Hugging Face in the deployment design. This keeps the application lightweight and separates model lifecycle management from the user-facing web app. Model repositories and credentials are deployment dependencies and are not shipped in this repository. Hosted model credentials remain server-side; the frontend must call only the backend.
 
-The serving layer should support:
+The serving layer is designed to support:
 
 - versioned model checkpoints
 - consistent preprocessing and postprocessing
 - model metadata such as class labels, training date, metrics, and threshold settings
-- future explainability outputs such as Grad-CAM heatmaps
+- optional explainability outputs through the local-model path
 
 ## Inference Design Layer
 
@@ -140,11 +140,16 @@ HF_API_BASE_URL
 PNEUMONIA_THRESHOLD
 SUBTYPE_THRESHOLD
 HF_REQUEST_TIMEOUT_SECONDS
+UPLOAD_MAX_SIZE_MB
+ALLOWED_ORIGINS
+LOCAL_MODEL_PATH
+LOCAL_MODEL_NAME
+NEXT_PUBLIC_BACKEND_URL (frontend build environment)
 ```
 
 ## Frontend Responsibilities
 
-The frontend should provide:
+The frontend provides:
 
 - upload component for chest X-ray images
 - image preview
@@ -154,7 +159,7 @@ The frontend should provide:
 - subtype result only when pneumonia is predicted
 - disclaimer and limitation notice
 
-The recommended frontend stack is React or Next.js hosted on Cloudflare Pages.
+The frontend is a Next.js static export hosted on Cloudflare Pages.
 
 ## Deployment Shape
 
@@ -163,18 +168,24 @@ Cloudflare Pages
   |
   | hosts React / Next.js frontend
   v
-Cloudflare-hosted backend where feasible
+Dockerized FastAPI backend on a container-capable host
   |
   | calls
   v
 Hugging Face model endpoint
 ```
 
-Docker should be available as a portable backend deployment option. This allows the Python API to be moved to any container-capable platform if the final backend dependencies exceed the supported runtime of the selected serverless platform.
+Docker is included as the portable backend deployment option. This allows the Python API to be moved to any container-capable platform.
+
+## Security, Privacy, and Medical-Use Boundaries
+
+- Do not upload real patient data or identifiable chest X-rays to a public demo. The browser, hosting platform, reverse proxy, and hosted model provider may process or log image bytes even when the application itself is stateless.
+- Keep `HF_TOKEN` and deployment secrets out of the repository and out of `NEXT_PUBLIC_*` variables. The latter are embedded in browser-visible static build output.
+- The system is educational and research software, not a medical device. It has not been clinically validated or cleared for diagnosis, treatment, triage, or any other clinical decision.
 
 ## Future Extensions
 
-- Grad-CAM explainability overlay
+- hosted-model explainability alternatives
 - ROC/AUC, sensitivity, specificity reporting in the app
 - ensemble inference endpoint
 - model version selection for internal evaluation

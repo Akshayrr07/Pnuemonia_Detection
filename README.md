@@ -1,12 +1,12 @@
 # Pneumonia Detection from Chest X-rays
 
-Production-oriented AI system for detecting pneumonia from chest X-ray images using a controlled dataset pipeline, PyTorch computer vision models, hierarchical classification, and cloud-hosted inference.
+Research-oriented AI system for detecting pneumonia from chest X-ray images using a controlled dataset pipeline, PyTorch computer vision models, hierarchical classification, and cloud-hosted inference.
 
 ## Project Goal
 
-The goal of this project is to build an end-to-end pneumonia detection system that moves beyond a simple model-training notebook. The system is designed around a full machine-learning workflow:
+This repository documents and implements an end-to-end pneumonia detection workflow that moves beyond a simple model-training notebook:
 
-- controlled dataset construction from multiple Kaggle sources
+- controlled dataset construction from multiple source datasets (provenance status is documented below)
 - duplicate removal and label normalization
 - leakage-safe train, validation, and test splits
 - multiple CNN-based training approaches
@@ -14,11 +14,13 @@ The goal of this project is to build an end-to-end pneumonia detection system th
 - model serving through Hugging Face
 - cloud-hosted frontend and backend application
 
-The intended user flow is simple: a user uploads a chest X-ray image, the system preprocesses the image, runs the pneumonia detection pipeline, and returns a structured prediction with confidence information and a medical-use disclaimer.
+The intended user flow is: a user uploads a chest X-ray image, the system preprocesses the image, runs the pneumonia detection pipeline, and returns a structured prediction with confidence information and a medical-use disclaimer.
 
 ## Dataset Strategy
 
-The original research pipeline combines three Kaggle chest X-ray datasets into one controlled dataset. Instead of training directly on raw folders, the project first audits and normalizes the data into a master registry.
+The research pipeline was designed to combine multiple Kaggle chest X-ray sources into one controlled dataset. The checked-in, deduplicated `data/metadata/master_registry.csv` contains **5,891 records from two source labels** (`dataset_1` and `dataset_2`). The historical `duplicates_removed.csv` log also contains `dataset_3` records, but no `dataset_3` rows remain in the current master registry. The original three-source claim therefore remains **provenance-unverified** until the source manifests, licenses, retrieval versions, and exact URLs are recorded.
+
+Instead of training directly on raw folders, the project first audits and normalizes the data into a master registry.
 
 The normalized target classes are:
 
@@ -35,15 +37,15 @@ Final controlled dataset:
 - leakage-safe split verification
 - class weights calculated to handle imbalance
 
-Large raw datasets are not committed to GitHub. The expected workflow is to download the Kaggle datasets locally, place them under `data/raw_datasets/`, and rebuild the registry and splits using the provided scripts.
+Large raw datasets are not committed to GitHub. The expected workflow is to obtain the source datasets through their documented, verified provenance, place them under `data/raw_datasets/`, and rebuild the registry and splits using the provided scripts.
 
-## Kaggle Dataset Sources
+## Dataset Provenance Status
 
-Add the exact Kaggle URLs used by the project here before final submission:
+**Provenance required — unresolved.** This repository does not contain verified dataset URLs, and no URL is inferred from filenames or folder names. Before release, record the canonical dataset name, publisher/owner, exact source URL, license, retrieval date or version, and the mapping to each `source_dataset` value. Until that manifest is added, the three-source wording from earlier research notes must not be treated as verified provenance.
 
-- Dataset 1: `TODO: Kaggle dataset URL`
-- Dataset 2: `TODO: Kaggle dataset URL`
-- Dataset 3: `TODO: Kaggle dataset URL`
+- `dataset_1`: **Provenance required** — source URL and manifest entry are unresolved.
+- `dataset_2`: **Provenance required** — source URL and manifest entry are unresolved.
+- `dataset_3`: **Historical-only status** — present in `data/metadata/duplicates_removed.csv`, absent from the current `master_registry.csv`; source URL and manifest entry are unresolved.
 
 Expected local structure:
 
@@ -52,7 +54,7 @@ data/
   raw_datasets/
     dataset_1/
     dataset_2/
-    dataset_3/
+    dataset_3/               # historical slot; not in current master_registry.csv
   metadata/
     master_registry.csv
     duplicates_removed.csv
@@ -105,12 +107,12 @@ The production inference contract should remain independent of any single model 
 
 ```text
 app/                         Streamlit prototype inference UI
-backend/                     planned Python API application
+backend/                     FastAPI API application
 configs/                     example training and inference configuration
 data/                        metadata and split CSVs; raw datasets excluded
 docs/                        project architecture, research, and deployment notes
 experiments/research_scripts/ historical research and experiment scripts
-frontend/                    planned React or Next.js application
+frontend/                    Next.js static-export application
 src/data/                    dataset, dataloader, transforms, class-weight utilities
 src/models/                  CNN model definitions and model factory
 src/training/                training loop and metrics
@@ -120,16 +122,16 @@ evaluate.py                  ensemble evaluation script
 evaluate_single.py           individual model evaluation script
 ```
 
-## Deployment Direction
+## Deployment Shape
 
-The deployment plan separates model serving from the application layer:
+The repository separates model serving from the application layer:
 
-- models hosted and managed on Hugging Face
+- a deployment design using models hosted and managed on Hugging Face
 - Python backend responsible for validation, preprocessing, inference orchestration, and API response formatting
 - React or Next.js frontend hosted on Cloudflare Pages
-- backend hosted on Cloudflare Workers where feasible, or packaged as a Docker service for container-capable infrastructure
+- backend packaged as a Docker service for container-capable infrastructure
 
-Docker support is planned so the backend can be run consistently across local machines and cloud environments.
+Docker artifacts are included so the backend can be run consistently across local machines and cloud environments. A live backend and hosted model repositories still require deployment-specific configuration and are not shipped by this repository.
 
 ## Inference Configuration
 
@@ -139,11 +141,25 @@ The hosted inference layer is configured through environment variables:
 HF_BINARY_MODEL_ID=
 HF_SUBTYPE_MODEL_ID=
 HF_TOKEN=
+HF_API_BASE_URL=https://api-inference.huggingface.co/models
 PNEUMONIA_THRESHOLD=0.5
 SUBTYPE_THRESHOLD=0.5
+HF_REQUEST_TIMEOUT_SECONDS=60
+UPLOAD_MAX_SIZE_MB=10
+ALLOWED_ORIGINS=
+
+# Frontend build-time variable (inlined into the static client bundle)
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 ```
 
-The reusable inference modules live in `src/inference/` and expose a hierarchical prediction pipeline for the future backend API.
+The reusable inference modules live in `src/inference/` and are used by the FastAPI backend and the legacy local demo. `NEXT_PUBLIC_BACKEND_URL` is a **build-time** frontend setting: set it before `npm run build` or the deployment build. Changing it in the hosting dashboard after a static export is built does not update the client; rebuild and redeploy the frontend.
+
+## Security, Privacy, and Medical-Use Warnings
+
+- **Do not upload real patient data or identifiable medical images to a public demo.** Chest X-rays can be sensitive health information even when names are removed. Use only data you are authorized to process, with appropriate consent, access controls, retention policies, and legal/regulatory review.
+- The hosted-model path sends the image bytes to the configured model provider. The browser and hosting platform can also log requests. The repository does not promise end-to-end privacy or retention guarantees; verify the behavior of every deployed service before handling health data.
+- `HF_TOKEN`, `.env` files, and any credentials must stay server-side and out of Git. `NEXT_PUBLIC_*` values are embedded in browser-visible build output; never place a token, secret, or private endpoint credential in one.
+- This project is an educational and research system, not a medical device or diagnostic service. It has not undergone clinical validation or regulatory clearance, and its reported research metrics do not establish live performance. Do not use a result as the sole basis for diagnosis, treatment, triage, or any clinical decision. Have a qualified healthcare professional review the original image and the clinical context.
 
 ## Medical Disclaimer
 

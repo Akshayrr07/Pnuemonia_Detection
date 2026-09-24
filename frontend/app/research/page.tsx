@@ -160,10 +160,14 @@ export default function ResearchPage() {
         <h2 className="section-title">Dataset</h2>
         <p className="section-text">
           The study used a controlled dataset of{" "}
-          <strong>5,891 unique chest X-rays</strong> assembled from three Kaggle
-          sources. Exact duplicates were removed using SHA256 hashing. Labels
-          were normalized to three classes:{" "}
-          <code>Normal</code>, <code>Bacterial Pneumonia</code>, and{" "}
+          <strong>5,891 unique chest X-rays</strong>. The current registry has
+          two source labels (<code>dataset_1</code> and <code>dataset_2</code>);
+          a historical duplicate log also contains <code>dataset_3</code>, but
+          that source is not in the current registry. Exact dataset URLs and
+          provenance are unresolved in this repository, so the earlier
+          three-source claim should not be treated as verified. Exact duplicates
+          were removed using SHA256 hashing. Labels were normalized to three
+          classes: <code>Normal</code>, <code>Bacterial Pneumonia</code>, and{" "}
           <code>Viral Pneumonia</code>.
         </p>
         <p className="section-text">

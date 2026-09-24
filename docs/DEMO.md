@@ -27,21 +27,24 @@ PYTHONPATH=. uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
 
 The API is now available at `http://localhost:8000`. The interactive API docs are at `http://localhost:8000/docs`.
 
-**2. Open the frontend**
+**2. Build and open the frontend**
 
-The frontend is a static export in `frontend/out/`. To serve it:
+Build the frontend with the backend URL embedded before serving the static export:
 
 ```bash
-cd frontend/out
+cd frontend
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000 npm run build
+cd out
 python3 -m http.server 3000
-# or: npx serve out
+# or: npx serve .
 ```
 
-Open `http://localhost:3000` in a browser. The frontend will attempt to call the backend at `NEXT_PUBLIC_BACKEND_URL`; when that is unset it falls back to the same origin, so for local testing you either need:
+`NEXT_PUBLIC_BACKEND_URL` is a build-time variable. If it is unset, the frontend falls back to the same origin. For local testing, either serve the backend on the same origin or rebuild with `NEXT_PUBLIC_BACKEND_URL=http://localhost:8000`; do not expect a runtime environment change to alter an already-built static bundle.
+
+Open `http://localhost:3000` in a browser. The frontend will attempt to call the backend at the URL embedded during that build. For local testing you either need:
 
 - to run the backend on port 3000 behind a proxy, or
-- to set `NEXT_PUBLIC_BACKEND_URL=http://localhost:8000` when serving the static export, or
-- to edit the API client to point at the backend URL you are using.
+- to rebuild the static export with `NEXT_PUBLIC_BACKEND_URL=http://localhost:8000`.
 
 **3. Make a prediction**
 
@@ -78,7 +81,7 @@ docker compose up --build
 
 The backend is then available at `http://localhost:8000`.
 
-### Option C — Use the live deployment
+### Option C — Use the published frontend
 
 The frontend is deployed to Cloudflare Pages at:
 
@@ -86,7 +89,7 @@ The frontend is deployed to Cloudflare Pages at:
 https://pneumonia-detection-8fz.pages.dev
 ```
 
-The backend is not yet deployed to a live host in this environment. To make the live frontend functional, deploy the backend container to a Docker-capable platform and set `NEXT_PUBLIC_BACKEND_URL` to the deployed backend URL.
+The backend is not yet deployed to a live host in this environment. To make the live frontend functional, deploy the backend container to a Docker-capable platform, set `NEXT_PUBLIC_BACKEND_URL` in the frontend **build** environment to the deployed backend URL, then rebuild and redeploy the frontend.
 
 ## API demo with curl
 
@@ -142,10 +145,16 @@ See `.env.example` at the repository root for the complete reference. The critic
 | `HF_API_BASE_URL` | No | Default: `https://api-inference.huggingface.co/models` |
 | `PNEUMONIA_THRESHOLD` | No | Default: `0.5` |
 | `SUBTYPE_THRESHOLD` | No | Default: `0.5` |
+| `HF_REQUEST_TIMEOUT_SECONDS` | No | Default: `60` |
 | `UPLOAD_MAX_SIZE_MB` | No | Default: `10` |
 | `ALLOWED_ORIGINS` | No | CORS origins; unset = permissive for local dev |
 | `LOCAL_MODEL_PATH` | No | Path to a local checkpoint for Grad-CAM |
 | `LOCAL_MODEL_NAME` | No | Model architecture name for Grad-CAM (`resnet`, `mobilenet`, etc.) |
+| `NEXT_PUBLIC_BACKEND_URL` | Frontend build | Backend URL embedded in the static client bundle; rebuild after changing it |
+
+## Safety and medical-use notice
+
+Do not use the demo with real patient data or identifiable medical images. Uploads may be processed or logged by the browser host, reverse proxy, hosting provider, and hosted model provider. This project is educational and research software, not a medical device, diagnosis, treatment recommendation, or triage tool. A qualified healthcare professional must review the original image and clinical context.
 
 ## Frontend development
 
@@ -178,4 +187,4 @@ See `experiments/README.md` for how to run the legacy research scripts if you ha
 
 **Grad-CAM not showing** — `LOCAL_MODEL_PATH` is not set or does not point to a valid checkpoint. The heatmap overlay is gated behind this env var by design.
 
-**Frontend cannot reach the backend** — check that `NEXT_PUBLIC_BACKEND_URL` is set correctly in the environment where the frontend is served, or that the frontend and backend share an origin.
+**Frontend cannot reach the backend** — check that `NEXT_PUBLIC_BACKEND_URL` was set in the **frontend build environment**, rebuild/redeploy the static frontend, and confirm the backend origin/CORS configuration. If the variable is unset, the frontend uses the same origin.

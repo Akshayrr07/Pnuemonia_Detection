@@ -6,7 +6,7 @@ This directory holds dataset metadata and split files for the pneumonia detectio
 
 ```text
 data/
-├── raw_datasets/          # (not committed) Kaggle chest X-ray images
+├── raw_datasets/          # (not committed) source chest X-ray images
 ├── metadata/
 │   └── master_registry.csv
 └── splits/
@@ -23,7 +23,7 @@ Each split file (`train.csv`, `val.csv`, `test.csv`) contains at minimum:
 - `encoded_label` — integer label (0 = Normal, 1 = Bacterial Pneumonia, 2 = Viral Pneumonia)
 - other registry columns as present in `master_registry.csv`
 
-The `original_path` column is used by `PneumoniaDataset` (in `src/data/dataset.py`) as the image location. Because the raw images are not committed to the repository, these paths are only meaningful after the user rebuilds the data locally from the documented Kaggle sources.
+The `original_path` column is used by `PneumoniaDataset` (in `src/data/dataset.py`) as the image location. Because the raw images are not committed to the repository, these paths are only meaningful after the user rebuilds the data locally from source datasets whose provenance has been verified. This repository does not currently contain verified source URLs or a source manifest.
 
 ### Path format
 
@@ -35,7 +35,7 @@ If you regenerate splits from your own local copy of the raw data, make sure you
 
 The raw images are not in this repository because of their size. To rebuild the data locally:
 
-1. Download the chest X-ray datasets from the Kaggle sources listed in `docs/ARCHITECTURE.md` or `docs/RESEARCH_SUMMARY.md`.
+1. Obtain the chest X-ray datasets from their verified source records. The current repository marks exact URLs and licenses as provenance-required; do not infer them from folder names.
 2. Place the image folders under `data/raw_datasets/`.
 3. Run the registry and split scripts from `experiments/research_scripts/` (see `experiments/README.md`) to recreate `master_registry.csv` and the split CSVs.
 
@@ -55,6 +55,6 @@ If you want to run inference with local checkpoints instead, you can:
 
 1. Train models using the scripts under `experiments/research_scripts/` (research history only) or the consolidated training code under `src/`.
 2. Save the resulting state dicts to a local directory.
-3. Point `LOCAL_MODEL_PATH` at the checkpoint and set `EXPLAINABILITY_ENABLED` to use the local-model explainability path in `backend/app.py`.
+3. Point `LOCAL_MODEL_PATH` at the checkpoint. The backend enables the local-model explainability path automatically when that variable is set; no additional toggle is needed.
 
 The legacy Streamlit app in `app/` also expects local checkpoints in `saved_models/`. That app is deprecated and has been superseded by the FastAPI backend + Next.js frontend.

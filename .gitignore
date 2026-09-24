@@ -10,8 +10,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+# Ignore Python packaging output without hiding source directories such as
+# `frontend/app/lib/`.
+/lib64/
 parts/
 sdist/
 var/
@@ -50,19 +52,31 @@ Thumbs.db
 .ipynb_checkpoints/
 *.ipynb
 
-# Data & Models (large files)
-data/raw_datasets/
-saved_models/*.pt
-outputs/
+# Data & models (large or sensitive artifacts)
+/data/raw_datasets/
+/saved_models/
+/checkpoints/
+/outputs/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.tflite
+*.h5
+*.keras
+*.joblib
+*.pkl
 
 # Logs & Reports
 *.log
 reports/*.txt
 
-# Environment
+# Environment and secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!**/.env.example
 
 # Misc
 *.bak

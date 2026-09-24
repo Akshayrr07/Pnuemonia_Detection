@@ -1,10 +1,12 @@
 # Research Summary
 
-This document summarizes the machine-learning work completed before production deployment.
+This document summarizes the machine-learning research work and the metrics recorded in this repository. The metrics are research results, not live end-to-end deployment measurements.
 
 ## Dataset Construction
 
-The project started by combining three Kaggle chest X-ray datasets into a single controlled dataset. The datasets were not used directly in their raw form. Instead, their folder structures and labels were audited, normalized, and merged into a single master registry.
+The checked-in, deduplicated `data/metadata/master_registry.csv` contains 5,891 records from two current source labels: `dataset_1` and `dataset_2`. A historical `duplicates_removed.csv` log also contains `dataset_3` records, but that source is not represented in the current master registry. The earlier three-source claim is therefore **provenance-unverified**; this repository does not provide verified source URLs, licenses, retrieval versions, or a source-to-label manifest.
+
+The datasets were not used directly in their raw form. Instead, their folder structures and labels were audited, normalized, and merged into a single master registry.
 
 The normalized class set is:
 
@@ -98,7 +100,8 @@ The repository includes foundations for soft and weighted probability voting. En
 ## Current Limitations
 
 - The raw datasets are not included in the repository due to size.
-- Current split CSVs may contain machine-specific file paths and should be regenerated for new environments.
+- Dataset source URLs, licenses, retrieval versions, and the mapping for each historical source label remain unresolved; provenance must be recorded before release.
+- Checked-in split CSVs use portable relative, forward-slash paths; any local regeneration must preserve that format.
 - Some experiment scripts under `experiments/research_scripts/` are legacy research scripts and should be consolidated before production use.
 - Three-class bacterial-versus-viral classification remains challenging.
 - The project is not a certified medical diagnostic system.

@@ -2,7 +2,7 @@
 
 Next.js web application for the Pneumonia Detection system. This is the user-facing interface for uploading chest X-rays and viewing hierarchical predictions.
 
-**Live deployment:** `https://pneumonia-detection-8fz.pages.dev`
+**Published frontend URL (historical deployment record):** `https://pneumonia-detection-8fz.pages.dev` (the backend is not documented as live)
 
 ## What it does
 
@@ -60,7 +60,7 @@ Images are left unoptimized because Cloudflare Pages serves the exported files d
 |---|---|
 | `NEXT_PUBLIC_BACKEND_URL` | URL of the deployed backend API. When unset, the frontend calls the same origin. |
 
-Set this in the Cloudflare Pages project settings (or in your local `.env`) to point at the deployed backend. For example:
+Set this in the **build environment** (Cloudflare Pages build settings, CI, or your local shell before `npm run build`) to point at the deployed backend. `NEXT_PUBLIC_*` values are embedded in the static client bundle at build time, so changing the value after a build has no effect; rebuild and redeploy the frontend. For example:
 
 ```
 NEXT_PUBLIC_BACKEND_URL=https://your-backend.example.com
@@ -82,3 +82,9 @@ NEXT_PUBLIC_BACKEND_URL=https://your-backend.example.com
 
 - The research page reports accuracy numbers from the research phase. These are not live inference results and may differ from what the deployed backend returns if the hosted checkpoints differ from the ones used in research.
 - Grad-CAM is enabled on the frontend only when the backend returns a non-null `heatmap_b64`. The backend only produces that field when `LOCAL_MODEL_PATH` points to a real checkpoint.
+
+## Safety and privacy
+
+- Do not upload real patient data or identifiable chest X-rays to a public deployment. The browser, hosting provider, reverse proxy, and hosted model provider may process or log image bytes.
+- Keep all credentials server-side. `NEXT_PUBLIC_*` values are public build output; never use them for secrets.
+- This is an educational and research system, not a medical device or diagnostic service. Do not use its output as the sole basis for clinical decisions; a qualified healthcare professional must review the original image and clinical context.
