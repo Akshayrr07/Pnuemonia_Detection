@@ -8,26 +8,24 @@ squash merging after the required checks pass.
 The `CI` workflow runs for:
 
 - every pull request;
-- pushes to `main`;
+- pushes to any branch;
 - manual runs from the Actions tab.
 
-The `Auto-merge` workflow is triggered by the `CI` workflow's `completed` event.
-It only starts when the entire CI run has concluded `success`, then finds the
-open pull request for that exact commit and enables GitHub auto-merge.
+The `Auto-merge` workflow is triggered when either the `CI` or the separate
+`Frontend clean build` workflow completes. It only starts when that workflow
+has concluded `success`, then waits until all required checks for the same PR
+commit are green before enabling GitHub auto-merge.
 Pull requests from forks still run CI, but auto-merge is skipped.
 
 ## Checks
 
-### Backend / Python
+### Python (compile, phase tests, dependency audit)
 
-- Python 3.11 syntax compilation.
-- Ruff linting.
-- Mypy type checking for the FastAPI backend and inference package.
+- Python source compilation.
 - The repository's executable backend verification scripts.
-- `pip check` dependency consistency.
-- `pip-audit` against `backend/requirements.txt`.
+- `pip-audit` against the pinned backend and research dependency metadata.
 
-### Frontend / Next.js
+### Frontend (clean install, lint, typecheck, build)
 
 - `npm ci` for deterministic dependency installation.
 - ESLint with zero warnings allowed.
@@ -38,17 +36,17 @@ Pull requests from forks still run CI, but auto-merge is skipped.
 There is currently no separate frontend unit-test suite, so the frontend gate
 consists of lint, type checking, build, and dependency audit.
 
-### Backend / Docker build
+### Docker image
 
 - Builds the production backend image.
 - Starts the image and verifies `GET /health` responds successfully.
 
 The required status-check names are:
 
-- `Backend / Python`
-- `Backend / Verification tests`
-- `Frontend / Next.js`
-- `Backend / Docker build`
+- `Frontend (clean install, lint, typecheck, build)`
+- `Python (compile, phase tests, dependency audit)`
+- `Docker image`
+- `frontend` (the separate clean-build workflow)
 
 ## One-time GitHub setup
 

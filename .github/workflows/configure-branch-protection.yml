@@ -26,10 +26,10 @@ jobs:
           github-token: ${{ secrets.CI_ADMIN_TOKEN }}
           script: |
             const requiredChecks = [
-              "Backend / Python",
-              "Backend / Verification tests",
-              "Frontend / Next.js",
-              "Backend / Docker build",
+              "Frontend (clean install, lint, typecheck, build)",
+              "Python (compile, phase tests, dependency audit)",
+              "Docker image",
+              "frontend",
             ];
 
             await github.rest.repos.updateBranchProtection({
