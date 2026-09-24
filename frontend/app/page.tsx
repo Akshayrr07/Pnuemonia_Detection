@@ -1,26 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { healthCheck, predict } from "./lib/api";
 import type { PredictResponse } from "./lib/types";
 
-/**
- * Simple progress bar component.
- */
-function ProgressBar({
-  value,
-  label,
-}: {
-  value: number;
-  label: string;
-}) {
+function IndeterminateProgress({ label }: { label: string }) {
   return (
-    <div className="progress">
-      <div className="progress-track">
-        <div className="progress-fill" style={{ width: `${value}%` }} />
+    <div className="progress" role="status" aria-live="polite">
+      <progress aria-label={label} />
+      <div className="progress-label">
+        <strong>{label}</strong> — this stage is indeterminate because the API
+        does not report upload or inference progress.
       </div>
-      <div className="progress-label">{label}</div>
     </div>
   );
 }
@@ -204,7 +196,7 @@ function HeatmapOverlay({ heatmapSrc }: { heatmapSrc: string }) {
       </div>
       <p className="heatmap-caption">
         Grad-CAM visualization highlights the regions of the X-ray that most
-        influenced the model's prediction. Red areas indicate higher importance.
+        influenced the model&apos;s prediction. Red areas indicate higher importance.
       </p>
     </div>
   );
@@ -215,11 +207,14 @@ export default function Home() {
   const [preview, setPreview] = useState<string | null>(null);
   const [result, setResult] = useState<PredictResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [progressLabel, setProgressLabel] = useState("");
+  const [predictionStage, setPredictionStage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pipelineReady, setPipelineReady] = useState<boolean | null>(null);
+  const [healthChecking, setHealthChecking] = useState(true);
+  const [healthError, setHealthError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const healthRequestRef = useRef(0);
+  const predictionRequestRef = useRef(0);
   /** Track the current blob URL so we can revoke it on unmount or replacement. */
   const previewUrlRef = useRef<string | null>(null);
 
@@ -236,24 +231,62 @@ export default function Home() {
     };
   }, []);
 
-  /**
-   * Report progress from the predict() call back into our label state.
-   */
-  const onProgress = useCallback(
-    (value: number, stage: string) => {
-      setProgress(value);
-      setProgressLabel(stage);
-    },
-    []
-  );
+  const checkHealth = useCallback(async () => {
+    const requestId = ++healthRequestRef.current;
+    setHealthChecking(true);
+    setHealthError(null);
+    setPipelineReady(null);
 
-  /**
-   * Check backend health on mount.
-   */
+    try {
+      const health = await healthCheck();
+      if (requestId === healthRequestRef.current) {
+        setPipelineReady(health.pipeline_ready);
+      }
+    } catch (err) {
+      if (requestId !== healthRequestRef.current) {
+        return;
+      }
+      setPipelineReady(false);
+      setHealthError(err instanceof Error ? err.message : "Health check failed");
+    } finally {
+      if (requestId === healthRequestRef.current) {
+        setHealthChecking(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
-    healthCheck()
-      .then((h) => setPipelineReady(h.pipeline_ready))
-      .catch(() => setPipelineReady(false));
+    const requestId = ++healthRequestRef.current;
+    void healthCheck()
+      .then((health) => {
+        if (requestId === healthRequestRef.current) {
+          setPipelineReady(health.pipeline_ready);
+        }
+      })
+      .catch((err: unknown) => {
+        if (requestId === healthRequestRef.current) {
+          setPipelineReady(false);
+          setHealthError(
+            err instanceof Error ? err.message : "Health check failed"
+          );
+        }
+      })
+      .finally(() => {
+        if (requestId === healthRequestRef.current) {
+          setHealthChecking(false);
+        }
+      });
+    return () => {
+      if (healthRequestRef.current === requestId) {
+        healthRequestRef.current += 1;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      predictionRequestRef.current += 1;
+    };
   }, []);
 
   /**
@@ -313,19 +346,30 @@ export default function Home() {
 
     setLoading(true);
     setError(null);
-    setProgress(0);
-    setProgressLabel("Starting...");
+    setPredictionStage("Sending image to the backend...");
+    const requestId = ++predictionRequestRef.current;
 
     try {
-      const data = await predict(file, onProgress);
-      setResult(data);
-      setProgress(100);
-      setProgressLabel("Complete");
+      const data = await predict(
+        file,
+        (_progress, stage) => {
+          if (requestId === predictionRequestRef.current) {
+            setPredictionStage(stage);
+          }
+        }
+      );
+      if (requestId === predictionRequestRef.current) {
+        setResult(data);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Prediction failed");
-      setResult(null);
+      if (requestId === predictionRequestRef.current) {
+        setError(err instanceof Error ? err.message : "Prediction failed");
+        setResult(null);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === predictionRequestRef.current) {
+        setLoading(false);
+      }
     }
   }
 
@@ -336,8 +380,9 @@ export default function Home() {
     setFile(null);
     setResult(null);
     setError(null);
-    setProgress(0);
-    setProgressLabel("");
+    setPredictionStage("");
+    predictionRequestRef.current += 1;
+    setLoading(false);
 
     const current = previewUrlRef.current;
     if (current) {
@@ -363,17 +408,29 @@ export default function Home() {
       <div className="connectivity">
         {pipelineReady === null ? (
           <span className="connectivity-status connectivity-status--checking">
-            Checking backend...
+            {healthChecking
+              ? "Checking backend..."
+              : "Backend status not checked"}
           </span>
         ) : pipelineReady ? (
           <span className="connectivity-status connectivity-status--ok">
             Backend ready
           </span>
         ) : (
-          <span className="connectivity-status connectivity-status--error">
-            Backend unavailable — start the API with
-            <code>uvicorn backend.app:app</code>
-          </span>
+          <div className="connectivity-status connectivity-status--error">
+            <span>
+              Backend unavailable
+              {healthError ? `: ${healthError}` : "."}
+            </span>
+            <button
+              type="button"
+              className="retry-button"
+              onClick={() => void checkHealth()}
+              disabled={healthChecking}
+            >
+              {healthChecking ? "Retrying..." : "Retry health check"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -440,10 +497,30 @@ export default function Home() {
             >
               Analyzing...
             </button>
-            <ProgressBar value={progress} label={progressLabel} />
+            <IndeterminateProgress
+              label={predictionStage || "Processing image..."}
+            />
           </>
         )}
       </section>
+
+      <aside className="privacy-notice" aria-label="Privacy and data transfer">
+        <h2 className="privacy-title">Privacy and data transfer</h2>
+        <p>
+          When you choose <strong>Analyze Image</strong>, the selected image is
+          sent from your browser to this application&apos;s configured backend.
+          The production hosted-model path may then process it with a
+          third-party model provider (such as Hugging Face). Do not upload
+          patient-identifiable images or protected health information.
+        </p>
+        <p>
+          The backend is intended to process the request without persistently
+          storing the image or prediction. The image is not sent to a third
+          party by the browser, but the provider&apos;s retention and processing
+          terms still apply. Remove the image and avoid using this demo for
+          clinical decisions.
+        </p>
+      </aside>
 
       {/* Result */}
       {result && <ResultCard data={result} />}
