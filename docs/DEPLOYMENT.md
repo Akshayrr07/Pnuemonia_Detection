@@ -81,8 +81,14 @@ PNEUMONIA_THRESHOLD=
 SUBTYPE_THRESHOLD=
 HF_REQUEST_TIMEOUT_SECONDS=
 ALLOWED_ORIGINS=
+APP_ENV=production
 MAX_UPLOAD_MB=
 ```
+
+`/live` is the process liveness probe. `/ready` is the traffic readiness probe
+and must return HTTP `503` with `pipeline_ready: false` until the inference
+pipeline is initialized. Docker and Compose healthchecks use `/ready` and
+require `pipeline_ready: true`.
 
 Secrets must not be committed to GitHub.
 

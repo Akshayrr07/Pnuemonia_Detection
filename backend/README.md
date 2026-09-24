@@ -4,9 +4,11 @@ Production Python API for the Pneumonia Detection system.
 
 ## Overview
 
-The backend exposes two endpoints:
+The backend exposes three service/prediction endpoints:
 
-- `GET /health` — service health and pipeline readiness check.
+- `GET /live` — process liveness, independent of inference availability.
+- `GET /ready` — readiness check; returns `503` until the inference pipeline is initialized.
+- `GET /health` — legacy combined status response.
 - `POST /predict` — accept a chest X-ray image upload and return a hierarchical prediction.
 
 The prediction flow follows the research result:
@@ -65,9 +67,11 @@ export SUBTYPE_THRESHOLD=0.5
 export HF_REQUEST_TIMEOUT_SECONDS=60
 export UPLOAD_MAX_SIZE_MB=10
 export ALLOWED_ORIGINS=http://localhost:3000,https://example.com
+export APP_ENV=production
 ```
 
-- `ALLOWED_ORIGINS` is a comma-separated list of CORS origins. When unset, the backend allows all origins for local development.
+- `ALLOWED_ORIGINS` is a comma-separated list of CORS origins. Development defaults to explicit local frontend origins (`localhost`/`127.0.0.1` on ports 3000, 5173, and 5174); production defaults to deny unless explicit origins are configured.
+- Wildcard origins are disabled rather than combined with credentials.
 - `UPLOAD_MAX_SIZE_MB` controls the maximum accepted upload size.
 
 ## Run locally
@@ -79,6 +83,24 @@ PYTHONPATH=. uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
 The API doc UI is available at `http://localhost:8000/docs`.
 
 ## Endpoints
+
+### `GET /live`
+
+Returns `200` when the API process is alive, even if the inference pipeline is
+not ready:
+
+```json
+{"status":"ok"}
+```
+
+### `GET /ready`
+
+Returns `200` with `pipeline_ready: true` when the inference pipeline is ready.
+Returns `503` with `pipeline_ready: false` while initialization is unavailable:
+
+```json
+{"status":"not_ready","pipeline_ready":false}
+```
 
 ### `GET /health`
 
@@ -145,7 +167,9 @@ If pneumonia is not detected, `subtype_prediction` and `subtype_confidence` are 
 
 ## CORS
 
-The backend includes CORS middleware. For local frontend development, either leave `ALLOWED_ORIGINS` unset for permissive development mode, or set it explicitly:
+The backend includes fail-closed CORS middleware. Development defaults to
+explicit local origins; set `APP_ENV=production` and configure production
+origins explicitly:
 
 ```bash
 export ALLOWED_ORIGINS=http://localhost:3000
