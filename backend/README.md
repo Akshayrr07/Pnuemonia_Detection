@@ -48,13 +48,15 @@ export PYTHONPATH=.
 
 ## Required environment variables
 
-The backend requires at least the following to be set before starting:
+The backend requires the two model IDs to be set before starting:
 
 ```bash
 export HF_BINARY_MODEL_ID=<huggingface-model-id>
 export HF_SUBTYPE_MODEL_ID=<huggingface-model-id>
-export HF_TOKEN=<optional-huggingface-token>
 ```
+
+`HF_TOKEN` is optional for public models. Keep it server-side and never place it
+in a `NEXT_PUBLIC_*` variable or a frontend `.env` file.
 
 Optional environment variables:
 

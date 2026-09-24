@@ -1,13 +1,13 @@
 # Deployment Notes
 
-This document describes the intended deployment direction for the pneumonia detection system.
+This document describes the deployment artifacts and configuration included in the repository.
 
 ## Deployment Goals
 
-The production-oriented system should separate the application from the model-serving layer:
+The documented deployment shape separates the application from the model-serving layer:
 
 - frontend hosted in the cloud
-- backend hosted in the cloud
+- backend hosted on a Docker-capable cloud or local host
 - trained model checkpoints hosted and managed through Hugging Face
 - Docker available for local and portable backend execution
 
@@ -15,9 +15,9 @@ This keeps the repository lightweight and avoids committing large model or datas
 
 ## Model Hosting
 
-Model checkpoints are intended to be hosted on Hugging Face. The application backend should call the hosted model layer rather than loading large checkpoints directly inside the frontend.
+Model checkpoints are hosted on Hugging Face in the documented deployment design. The repository does not include hosted repositories or checkpoints; the application backend calls the hosted model layer rather than loading weights inside the frontend.
 
-The hosted model layer should eventually include:
+A production hosted model layer should include:
 
 - binary Normal-vs-Pneumonia checkpoint
 - subtype Bacterial-vs-Viral checkpoint
@@ -28,13 +28,13 @@ The hosted model layer should eventually include:
 
 ## Frontend Hosting
 
-The recommended frontend target is Cloudflare Pages. Cloudflare Pages supports React applications and is suitable for hosting a lightweight upload-and-results interface.
+The documented frontend target is Cloudflare Pages. It is suitable for the lightweight upload-and-results static interface.
 
 The frontend should not contain model credentials or model-serving logic. It should only call the backend API.
 
 ## Backend Hosting
 
-The backend is planned as a Python API responsible for:
+The repository includes a FastAPI Python backend responsible for:
 
 - receiving image uploads
 - validating files
@@ -43,18 +43,18 @@ The backend is planned as a Python API responsible for:
 - applying hierarchical prediction logic
 - returning structured JSON
 
-Cloudflare Workers can be considered for the Python backend where the dependency set is compatible with the runtime. If the backend requires packages or runtime behavior better suited to containers, the Docker deployment path should be used.
+The documented backend path is the Docker deployment. A serverless worker would require a separate compatibility review and is not assumed by this repository.
 
 ## Docker Support
 
-Docker support is planned for backend portability. A Dockerized backend allows the API to run consistently across:
+Docker support is included for backend portability. A Dockerized backend allows the API to run consistently across:
 
 - local development machines
 - cloud virtual machines
 - container platforms
 - demos and evaluation environments
 
-Planned Docker artifacts:
+Included Docker artifacts:
 
 ```text
 Dockerfile
@@ -62,7 +62,7 @@ docker-compose.yml
 .dockerignore
 ```
 
-Expected local command shape:
+Local command shape:
 
 ```bash
 docker compose up --build
@@ -76,15 +76,34 @@ The backend should use environment variables for deployment-specific settings:
 HF_TOKEN=
 HF_BINARY_MODEL_ID=
 HF_SUBTYPE_MODEL_ID=
-HF_API_BASE_URL=
+HF_API_BASE_URL=https://api-inference.huggingface.co/models
 PNEUMONIA_THRESHOLD=
 SUBTYPE_THRESHOLD=
 HF_REQUEST_TIMEOUT_SECONDS=
 ALLOWED_ORIGINS=
-MAX_UPLOAD_MB=
+UPLOAD_MAX_SIZE_MB=
+
+# Optional local-model explainability
+LOCAL_MODEL_PATH=
+LOCAL_MODEL_NAME=resnet
+
+# Frontend build-time variable; set before `npm run build`/deployment build
+NEXT_PUBLIC_BACKEND_URL=
 ```
 
 Secrets must not be committed to GitHub.
+
+`HF_API_BASE_URL` is the model endpoint base, not the general Hugging Face API
+host; the current adapter appends the model ID, so its default is
+`https://api-inference.huggingface.co/models`. `NEXT_PUBLIC_BACKEND_URL` is
+inlined into the static frontend bundle at build time. Set it before the
+frontend build, rebuild after changing it, and never place secrets in a
+`NEXT_PUBLIC_*` value.
+
+Do not place real patient images or credentials in a public deployment. Review
+request logging, retention, access control, and the hosted model provider's
+data handling before processing health data. The application is educational
+and research software, not a medical device or diagnostic service.
 
 ## Target Cloud Layout
 
