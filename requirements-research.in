@@ -1,0 +1,22 @@
+# Offline ML, evaluation, dataset, and legacy research dependencies.
+# Supported runtime: Python 3.11 (see pyproject.toml and the lock metadata).
+#
+# IMPORTANT: torch and torchvision intentionally use public, platform-
+# compatible version ranges rather than CUDA-local `+cu...` pins. Install on
+# a CUDA machine with `uv pip install --torch-backend=cu124 -r
+# requirements-research.in` (or another backend supported by that machine),
+# or use the CPU installation documented in docs/DEPLOYMENT.md. The default
+# lock selects published wheels for the host without requiring a local CUDA
+# index.
+numpy>=1.26,<3
+pandas>=2.1,<3
+Pillow>=10,<13
+ImageHash>=4.3,<5
+scikit-learn>=1.3,<1.6
+scipy>=1.11,<1.15
+torch>=2.14,<3
+torchvision>=0.29,<1
+torchaudio>=2.11,<3
+tqdm>=4.66,<5
+matplotlib>=3.8,<4
+streamlit>=1.30,<2

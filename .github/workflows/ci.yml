@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (clean install, lint, typecheck, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Clean install
+        run: |
+          rm -rf node_modules .next out
+          npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit frontend dependencies
+        run: npm audit --audit-level=high
+
+  python:
+    name: Python (compile, phase tests, dependency audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Install backend dependencies
+        run: |
+          uv venv --python 3.11 .venv-backend
+          uv pip install --python .venv-backend/bin/python -r backend/requirements.txt
+
+      - name: Compile Python source
+        run: |
+          .venv-backend/bin/python -m compileall -q backend src experiments app main.py evaluate.py evaluate_single.py
+
+      - name: Run phase tests
+        env:
+          HF_BINARY_MODEL_ID: test/binary
+          HF_SUBTYPE_MODEL_ID: test/subtype
+        run: |
+          PYTHONPATH=. .venv-backend/bin/python backend/test_phase4.py
+          PYTHONPATH=. .venv-backend/bin/python backend/test_phase7.py
+
+      - name: Audit backend constraints
+        run: uvx pip-audit --strict --no-deps -r backend/constraints.txt --progress-spinner off
+
+      - name: Audit research lock
+        run: uvx pip-audit --strict --no-deps -r requirements-research.lock --progress-spinner off
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: pneumonia-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test image startup and healthcheck
+        run: |
+          docker run -d --name pneumonia-api-ci \
+            -e HF_BINARY_MODEL_ID=test/binary \
+            -e HF_SUBTYPE_MODEL_ID=test/subtype \
+            -p 8000:8000 \
+            pneumonia-api:ci
+          for attempt in $(seq 1 30); do
+            if docker exec pneumonia-api-ci python -c \
+              "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).status)"; then
+              docker rm -f pneumonia-api-ci
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs pneumonia-api-ci || true
+          docker rm -f pneumonia-api-ci || true
+          exit 1

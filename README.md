@@ -145,6 +145,41 @@ SUBTYPE_THRESHOLD=0.5
 
 The reusable inference modules live in `src/inference/` and expose a hierarchical prediction pipeline for the future backend API.
 
+## Supported Python environments
+
+The supported runtime for the production service and research pipeline is
+Python 3.11 (`3.11.x`), declared in `pyproject.toml`. Keep the lightweight
+hosted-inference service and the larger research environment separate:
+
+```bash
+# Production/backend API
+uv venv --python 3.11
+uv pip install -r backend/requirements.txt
+
+# Offline training, evaluation, experiments, and legacy Streamlit app
+uv venv --python 3.11 .venv-research
+uv pip install -r requirements-research.txt
+```
+
+`backend/requirements.in` is the backend source declaration and
+`backend/constraints.txt` records its resolved Python 3.11 metadata.
+`requirements-research.in` is the research source declaration and
+`requirements-research.lock` records the corresponding resolution. The root
+`requirements.txt` is only a compatibility shim for existing backend commands.
+
+Do not copy CUDA-local package versions such as `+cu117` into a root or
+portable requirements file. The default paths resolve published wheels for the
+host. On a CUDA machine, select the supported backend explicitly, for example:
+
+```bash
+uv pip install --torch-backend=cu124 -r requirements-research.in
+```
+
+Use the CPU default when CUDA is not required. The research lock is an
+inspection/reproducibility aid, not a promise that every platform-specific
+CUDA wheel can be installed on every host; choose a platform-appropriate lock
+or regenerate it with uv for the deployment target.
+
 ## Medical Disclaimer
 
 This project is for educational and research purposes. It is not a certified medical device and must not be used as the sole basis for diagnosis or treatment. Any abnormal result should be reviewed by a qualified medical professional.

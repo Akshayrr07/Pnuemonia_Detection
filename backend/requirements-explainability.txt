@@ -1,0 +1,8 @@
+# Optional Grad-CAM dependencies. Install with:
+#   uv pip install -r backend/requirements-explainability.txt
+# Regenerate the exact resolution with:
+#   uv pip compile backend/requirements-explainability.in \
+#     --python-version 3.11 --universal --output-file \
+#     backend/requirements-explainability.lock --no-annotate
+-r requirements-explainability.in
+-c requirements-explainability.lock
