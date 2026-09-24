@@ -128,12 +128,17 @@ print(classification_report(labels, ensemble_preds))
 # 2️⃣ WEIGHTED SOFT VOTING
 # ============================================================
 
-# Replace these with actual validation accuracies if available
-weights = torch.tensor([0.74, 0.77, 0.75, 0.76])
-weights = weights / weights.sum()
+# Weights are an explicit input to this legacy research script. Use equal
+# weights unless a separately prepared, documented evaluation run supplies a
+# validated weighting. Do not tune these values on the test set.
+weights = None  # equal weighting by default
+if weights is None:
+    weights = torch.full((len(models),), 1.0 / len(models))
+else:
+    weights = torch.as_tensor(weights, dtype=all_model_probs.dtype)
+    weights = weights / weights.sum()
 
 weighted_probs = torch.zeros_like(all_model_probs[0])
-
 for i in range(len(models)):
     weighted_probs += weights[i] * all_model_probs[i]
 
