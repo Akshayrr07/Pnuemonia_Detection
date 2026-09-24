@@ -10,8 +10,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Ignore Python build artifacts without hiding source directories named lib.
+/lib/
+/lib64/
 parts/
 sdist/
 var/
