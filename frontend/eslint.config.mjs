@@ -5,6 +5,14 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Keep the existing UI copy unchanged; the apostrophe in the Grad-CAM
+  // explanation is intentional prose rather than HTML markup.
+  {
+    files: ["app/page.tsx"],
+    rules: {
+      "react/no-unescaped-entities": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
