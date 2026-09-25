@@ -1,0 +1,29 @@
+# Example configuration for reproducible ensemble evaluation.
+# Copy this file to configs/evaluation.json (or .yaml) and adjust paths.
+# Command-line values override values in the config file.
+#
+# Documented defaults:
+# - split manifests: data/splits/{train,val,test}.csv
+# - dataset root recorded in the report: data/raw_datasets
+# - models: mobilenet, efficientnet, resnet (in that order)
+# - batch size: 32
+# - viral_boost: 1.0 (neutral; no hidden class adjustment)
+# - ensemble_weights: omitted (equal weighting)
+# - device: auto
+# - report directory: reports
+
+train_csv: data/splits/train.csv
+val_csv: data/splits/val.csv
+test_csv: data/splits/test.csv
+dataset_root: data/raw_datasets
+checkpoint_dir: saved_models
+report_dir: reports
+models: [mobilenet, efficientnet, resnet]
+batch_size: 32
+viral_boost: 1.0
+device: auto
+
+# To opt in to a non-uniform ensemble, provide exactly one weight per model.
+# Omitting ensemble_weights means equal weighting. Any non-neutral boost or
+# non-uniform weighting is an explicit evaluation choice recorded in reports.
+# ensemble_weights: [0.25, 0.35, 0.40]
