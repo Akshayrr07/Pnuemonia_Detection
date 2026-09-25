@@ -11,7 +11,7 @@ function MetricCard({
 }: {
   title: string;
   subtitle: string;
-  accuracy: number;
+  accuracy: number | string;
   size?: "sm" | "lg";
 }) {
   return (
@@ -26,7 +26,9 @@ function MetricCard({
       <div className="metric-numbers">
         <div className="metric-number">
           <span className="metric-value metric-value--accent">
-            {(accuracy * 100).toFixed(accuracy < 0.1 ? 4 : 2)}%
+            {typeof accuracy === "string"
+              ? accuracy
+              : `${(accuracy * 100).toFixed(2)}%`}
           </span>
           <span className="metric-label">Accuracy</span>
         </div>
@@ -179,7 +181,7 @@ export default function ResearchPage() {
           <MetricCard
             title="Three-Class Classification"
             subtitle="Normal vs Bacterial vs Viral"
-            accuracy={0.77}
+            accuracy="approximately 74–77%"
             size="lg"
           />
           <MetricCard
