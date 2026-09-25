@@ -243,9 +243,9 @@ def _validate_upload(file: UploadFile) -> Image.Image:
         )
 
     try:
-        image = Image.open(__import__("io").BytesIO(contents))
-        image.load()  # force decode so we fail early on corrupt data
-        image = image.convert("RGB")
+        decoded_image = Image.open(__import__("io").BytesIO(contents))
+        decoded_image.load()  # force decode so we fail early on corrupt data
+        image = decoded_image.convert("RGB")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not decode image: {exc}") from exc
 

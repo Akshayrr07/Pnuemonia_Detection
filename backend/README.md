@@ -29,7 +29,9 @@ Shared inference code lives in `src/inference/` and is imported directly by the 
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.11.x (the supported runtime for this backend)
+- `uv` is recommended for reproducible installs; a standard virtual environment
+  and `pip` also work
 - Setuptools-compatible install of the repo so that `src/` is importable, or run with `PYTHONPATH=.`
 
 ## Install
@@ -37,7 +39,17 @@ Shared inference code lives in `src/inference/` and is imported directly by the 
 From the repository root:
 
 ```bash
-pip install -r backend/requirements.txt
+uv venv --python 3.11
+uv pip install -r backend/requirements.txt
+```
+
+`backend/requirements.in` contains the supported ranges and
+`backend/constraints.txt` records the resolved Python 3.11 metadata. If the
+optional local Grad-CAM path is needed, install its separate dependency set
+as well:
+
+```bash
+uv pip install -r backend/requirements-explainability.txt
 ```
 
 If `src/` is not installed as a package, set the Python path:

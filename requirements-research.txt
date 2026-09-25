@@ -1,0 +1,6 @@
+# Research dependencies. Install the compiled lock with:
+#   uv pip install -r requirements-research.txt
+# The source ranges live in requirements-research.in. The PyTorch packages
+# intentionally have no CUDA-local `+cu...` pins. For CUDA, use:
+#   uv pip install --torch-backend=cu124 -r requirements-research.in
+-r requirements-research.lock
