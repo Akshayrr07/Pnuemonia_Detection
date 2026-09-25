@@ -4,11 +4,30 @@ from .dataset import PneumoniaDataset
 from .transforms import get_train_transforms, get_val_transforms
 
 
-def get_dataloaders(train_csv, val_csv, test_csv, batch_size=32):
+def get_dataloaders(
+    train_csv,
+    val_csv,
+    test_csv,
+    batch_size=32,
+    *,
+    raw_root=None,
+):
 
-    train_dataset = PneumoniaDataset(train_csv, transform=get_train_transforms())
-    val_dataset   = PneumoniaDataset(val_csv, transform=get_val_transforms())
-    test_dataset  = PneumoniaDataset(test_csv, transform=get_val_transforms())
+    train_dataset = PneumoniaDataset(
+        train_csv,
+        transform=get_train_transforms(),
+        raw_root=raw_root,
+    )
+    val_dataset = PneumoniaDataset(
+        val_csv,
+        transform=get_val_transforms(),
+        raw_root=raw_root,
+    )
+    test_dataset = PneumoniaDataset(
+        test_csv,
+        transform=get_val_transforms(),
+        raw_root=raw_root,
+    )
 
     use_cuda = torch.cuda.is_available()
 

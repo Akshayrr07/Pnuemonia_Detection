@@ -95,7 +95,6 @@ function ConfusionMatrixPlaceholder({
           <rect x="105" y="90" width="75" height="55" rx="3" fill="#e5e7eb" />
           {/* cell text placeholders */}
           <text x="57" y="48" textAnchor="middle" fontSize="10" fill="#9ca3af">
-            {/* eslint-disable-next-line react/no-unknown-props */}
             n
           </text>
           <text x="142" y="48" textAnchor="middle" fontSize="10" fill="#9ca3af">

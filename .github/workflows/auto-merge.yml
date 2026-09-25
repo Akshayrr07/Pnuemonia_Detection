@@ -1,0 +1,134 @@
+name: Auto-merge
+
+on:
+  workflow_run:
+    workflows: ["CI", "Frontend clean build"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: auto-merge-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  enable:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Find the pull request associated with this completed CI run
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr_number=$(gh api "repos/${GH_REPO}/commits/${PR_HEAD_SHA}/pulls" \
+            --jq '.[] | select(.state == "open" and .base.ref == "main" and .head.repo.full_name == env.GH_REPO) | .number' \
+            | head -n 1)
+
+          if [ -z "$pr_number" ]; then
+            echo "No pull request targets this commit; nothing to do."
+            exit 0
+          fi
+
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+
+      - name: Wait until every required CI check is successful
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          PR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr=$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}")
+          state=$(printf '%s' "$pr" | jq -r '.state')
+          base_ref=$(printf '%s' "$pr" | jq -r '.base.ref')
+          draft=$(printf '%s' "$pr" | jq -r '.draft')
+          head_repo=$(printf '%s' "$pr" | jq -r '.head.repo.full_name')
+          head_sha=$(printf '%s' "$pr" | jq -r '.head.sha')
+
+          if [ "$state" != "open" ] || [ "$base_ref" != "main" ] || [ "$draft" != "false" ] || [ "$head_repo" != "$GH_REPO" ]; then
+            echo "PR #$PR_NUMBER is not eligible for automatic squash merge."
+            exit 0
+          fi
+
+          if [ "$head_sha" != "$PR_HEAD_SHA" ]; then
+            echo "PR #$PR_NUMBER changed after CI completed; refusing to auto-merge."
+            exit 0
+          fi
+
+          # Each key is workflow-name|check-name. The clean-build workflow is
+          # separate from CI, so it is deliberately included as its own gate.
+          required_checks=(
+            "CI|Frontend (clean install, lint, typecheck, build)"
+            "CI|Python (compile, phase tests, dependency audit)"
+            "CI|Docker image"
+            "Frontend clean build|frontend"
+          )
+
+          deadline=$(( $(date +%s) + 1800 ))
+          while true; do
+            if ! checks_json=$(gh pr checks "$PR_NUMBER" --repo "$GH_REPO" \
+              --json name,state,workflow,event 2>/dev/null); then
+              checks_json='[]'
+            fi
+
+            blocker=""
+            for check_key in "${required_checks[@]}"; do
+              workflow_name=${check_key%%|*}
+              check_name=${check_key#*|}
+              result=$(printf '%s' "$checks_json" | jq -r \
+                --arg workflow "$workflow_name" --arg name "$check_name" '
+                  [.[] | select(.event == "pull_request" and .workflow == $workflow and .name == $name)] as $matches
+                  | if ($matches | length) == 0 then "MISSING"
+                    elif any($matches[]; .state == "FAILURE" or .state == "CANCELLED" or .state == "SKIPPED" or .state == "TIMED_OUT" or .state == "ACTION_REQUIRED" or .state == "STARTUP_FAILURE" or .state == "STALE" or .state == "ERROR") then "FAILED"
+                    elif all($matches[]; .state == "SUCCESS") then "SUCCESS"
+                    else "PENDING"
+                    end
+                ')
+
+              if [ "$result" = "FAILED" ]; then
+                echo "A required CI check failed: $workflow_name / $check_name"
+                exit 1
+              fi
+
+              if [ "$result" != "SUCCESS" ]; then
+                blocker="$workflow_name / $check_name ($result)"
+                break
+              fi
+            done
+
+            if [ -z "$blocker" ]; then
+              echo "All required CI checks are green."
+              break
+            fi
+
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "Timed out waiting for required CI check: $blocker"
+              exit 1
+            fi
+
+            echo "Waiting for required CI checks; current blocker: $blocker"
+            sleep 15
+          done
+
+      - name: Enable GitHub auto-merge for the green pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          PR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          gh pr merge "$PR_NUMBER" \
+            --repo "$GH_REPO" \
+            --squash \
+            --auto \
+            --match-head-commit "$PR_HEAD_SHA"

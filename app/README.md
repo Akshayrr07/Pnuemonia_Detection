@@ -25,22 +25,22 @@ applicable), probabilities, and the medical disclaimer.
 
 ## Requirements
 
-- Python 3.11+
-- The project virtualenv (see `backend/requirements.txt` and the root
-  `requirements.txt` for the core dependencies)
+- Python 3.11.x
+- The project virtualenv. Install the lightweight API set with
+  `uv pip install -r backend/requirements.txt`; install the research/demo set
+  with `uv pip install -r requirements-research.txt`
 - `streamlit` (installed separately; not in the production requirements)
 
-Install the extra dependency:
+Install the extra dependencies from the research environment instead of
+installing them ad hoc:
 
 ```bash
-pip install streamlit
+uv pip install -r requirements-research.txt
 ```
 
-You also need the Hugging Face Inference SDK:
-
-```bash
-pip install "huggingface_hub[inference]"
-```
+The production backend does not require the legacy Streamlit app. The research
+set also provides the PyTorch/torchvision packages needed by the local
+Grad-CAM path; the hosted-inference API can remain installed without them.
 
 ## Configuration
 
