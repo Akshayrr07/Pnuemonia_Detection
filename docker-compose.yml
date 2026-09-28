@@ -23,6 +23,10 @@ services:
       - INFERENCE_WORKERS=${INFERENCE_WORKERS:-4}
       - INFERENCE_RATE_LIMIT_PER_SECOND=${INFERENCE_RATE_LIMIT_PER_SECOND:-0}
       - UPLOAD_MAX_SIZE_MB=${UPLOAD_MAX_SIZE_MB:-10}
+      - MAX_IMAGE_WIDTH=${MAX_IMAGE_WIDTH:-8192}
+      - MAX_IMAGE_HEIGHT=${MAX_IMAGE_HEIGHT:-8192}
+      - MAX_IMAGE_PIXELS=${MAX_IMAGE_PIXELS:-40000000}
+      - MAX_IMAGE_FRAMES=${MAX_IMAGE_FRAMES:-1}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
       # Optional Grad-CAM settings. The volume is opt-in and the image does not
       # install optional explainability packages by default.
