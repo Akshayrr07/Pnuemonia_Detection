@@ -76,7 +76,7 @@ jobs:
           # separate from CI, so it is deliberately included as its own gate.
           required_checks=(
             "CI|Frontend (clean install, lint, typecheck, build)"
-            "CI|Python (compile, phase tests, dependency audit)"
+            "CI|Python (compile, tests, dependency audit)"
             "CI|Docker image"
             "Frontend clean build|frontend"
           )
