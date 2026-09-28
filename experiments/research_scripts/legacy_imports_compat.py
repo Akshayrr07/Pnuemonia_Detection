@@ -79,6 +79,13 @@ class PneumoniaDataset(_data.PneumoniaDataset):
 
         self.df = dataframe
         self.transform = transform
+        # The modern base class resolves and validates image paths in its own
+        # __init__; reproduce that contract here so the inherited __getitem__
+        # keeps working while legacy fixtures outside the repository raw root
+        # remain accepted.
+        self.raw_root = self._resolve_root(None)
+        self.validate_paths = False
+        self._resolved_paths = [Path(str(value)) for value in self.df["image_path"]]
 
 CustomCNN = getattr(_models, "CustomCNN", None)
 if CustomCNN is None:
