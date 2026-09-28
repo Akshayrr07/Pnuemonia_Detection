@@ -1,23 +1,33 @@
-import torch
-import multiprocessing
-import os
-from datetime import datetime
+"""Evaluation entry-point orchestration with no hidden post-hoc transforms."""
 
+from __future__ import annotations
+
+import json
+import multiprocessing
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, Sequence
+
+import torch
 from sklearn.metrics import (
     accuracy_score,
+    f1_score,
     precision_score,
     recall_score,
-    f1_score,
-    roc_auc_score
+    roc_auc_score,
 )
 
 from src.data.dataloader import get_dataloaders
-from src.inference.load_models import load_all_models
+from src.evaluation.aggregation import soft_vote, weighted_vote
+from src.evaluation.config import EvaluationConfig, parse_args
+from src.evaluation.loader import load_evaluation_models
+from src.evaluation.metadata import dataset_metadata, model_metadata, split_metadata
 from src.inference.ensemble import get_ensemble_predictions
 
 
 # =========================
 # METRIC FUNCTIONS
+# These calculations are intentionally preserved from the original script.
 # =========================
 
 def compute_metrics(y_true, y_pred):
@@ -42,97 +52,127 @@ def log(file, text):
     file.write(text + "\n")
 
 
-# =========================
-# MAIN EVALUATION
-# =========================
+def _resolve_device(requested: str):
+    if requested == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(requested)
 
-def main():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    os.makedirs("reports", exist_ok=True)
+def _report_path(config: EvaluationConfig) -> Path:
+    if config.report_path:
+        return Path(config.report_path)
+    return Path(config.report_dir) / (
+        f"evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    )
 
-    report_path = f"reports/evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 
-    with open(report_path, "w") as f:
+def _write_metadata(
+    file,
+    config: EvaluationConfig,
+    device: torch.device,
+) -> None:
+    split_blocks = [
+        split_metadata("train", config.train_csv, dataset_root=config.dataset_root),
+        split_metadata("validation", config.val_csv, dataset_root=config.dataset_root),
+        split_metadata("test", config.test_csv, dataset_root=config.dataset_root),
+    ]
+    provenance = {
+        "config": config.to_dict(),
+        "dataset": dataset_metadata(
+            split_blocks,
+            dataset_root=config.dataset_root,
+        ),
+        "models": model_metadata(config.model_names, config.checkpoint_dir),
+        "device": str(device),
+    }
+    log(file, "Evaluation configuration:")
+    log(file, json.dumps(provenance["config"], sort_keys=True))
+    log(file, "Dataset and split metadata:")
+    log(file, json.dumps(provenance["dataset"], sort_keys=True))
+    log(file, "Model metadata:")
+    log(file, json.dumps(provenance["models"], sort_keys=True))
+    log(file, f"Device: {device}")
+    log(file, "-" * 60)
 
-        log(f, "===== FINAL MODEL EVALUATION REPORT =====")
-        log(f, f"Device: {device}")
-        log(f, "-" * 60)
 
-        # 🔹 Load Data
+def _write_metric_block(
+    file,
+    title: str,
+    y_true,
+    probs,
+    labels: Optional[Sequence[str]] = None,
+) -> None:
+    metrics = compute_metrics(y_true, probs.argmax(axis=1))
+    auc = compute_auc_from_probs(y_true, probs)
+    log(file, f"\n=== {title} ===")
+    if labels is not None:
+        log(file, f"Model order: {', '.join(labels)}")
+    for key, value in metrics.items():
+        log(file, f"{key}: {value:.4f}")
+    log(file, f"AUC: {auc:.4f}")
+
+
+def run(config: Optional[EvaluationConfig] = None) -> Path:
+    """Execute one evaluation and return the report path."""
+
+    config = config or parse_args([])
+    device = _resolve_device(config.device)
+    report_path = _report_path(config)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with report_path.open("w", encoding="utf-8") as file:
+        log(file, "===== FINAL MODEL EVALUATION REPORT =====")
+        _write_metadata(file, config, device)
+
+        # Loading the train/val/test manifests preserves the existing
+        # dataloader contract while making all three split identities explicit.
         _, _, test_loader = get_dataloaders(
-            "data/splits/train.csv",
-            "data/splits/val.csv",
-            "data/splits/test.csv"
+            config.train_csv,
+            config.val_csv,
+            config.test_csv,
+            batch_size=config.batch_size,
+        )
+        models = load_evaluation_models(
+            device,
+            model_names=config.model_names,
+            checkpoint_dir=config.checkpoint_dir,
+        )
+        all_model_probs, labels = get_ensemble_predictions(models, test_loader, device)
+        labels = labels.cpu().numpy()
+
+        soft_probs = soft_vote(
+            all_model_probs.cpu().numpy(),
+            viral_boost=config.viral_boost,
+        )
+        _write_metric_block(
+            file,
+            "SOFT VOTING",
+            labels,
+            soft_probs,
+            labels=config.model_names,
         )
 
-        # 🔹 Load Models
-        models = load_all_models(device)
-        model_names = ["mobilenet", "efficientnet", "resnet"]
-        log(f, f"\nModels Loaded: {model_names}")
-        log(f, "-" * 60)
-
-        # 🔹 Get predictions (Tensor shape: [num_models, N, num_classes])
-        all_model_probs, labels = get_ensemble_predictions(models, test_loader, device)
-
-        # =========================
-        # SOFT VOTING
-        # =========================
-        log(f, "\n=== SOFT VOTING ===")
-
-        # Compute probabilities
-        soft_probs = torch.mean(all_model_probs, dim=0)
-
-        # 🔥 Boost viral class
-        soft_probs[:, 2] *= 1.05
-
-        # ✅ Normalize (CRITICAL)
-        soft_probs = soft_probs / soft_probs.sum(dim=1, keepdim=True)
-
-        soft_probs = soft_probs.cpu().numpy()
-        soft_preds = soft_probs.argmax(axis=1)
-
-        soft_metrics = compute_metrics(labels, soft_preds)
-        soft_auc = compute_auc_from_probs(labels, soft_probs)
-
-        for k, v in soft_metrics.items():
-            log(f, f"{k}: {v:.4f}")
-
-        log(f, f"AUC: {soft_auc:.4f}")
-
-        # =========================
-        # WEIGHTED VOTING
-        # =========================
-        log(f, "\n=== WEIGHTED VOTING ===")
-
-        # 🔹 Define weights
-        weights = torch.tensor([0.85, 0.86, 0.88]).to(all_model_probs.device)
-        weights = weights.view(-1, 1, 1)
-
-        # 🔹 Weighted probabilities
-        weighted_probs = (all_model_probs * weights).sum(dim=0)
-        weighted_probs = weighted_probs / weights.sum()
-
-        # 🔥 Boost viral class
-        weighted_probs[:, 2] *= 1.05
-
-        # ✅ Normalize (CRITICAL)
-        weighted_probs = weighted_probs / weighted_probs.sum(dim=1, keepdim=True)
-
-        weighted_probs = weighted_probs.cpu().numpy()
-        weighted_preds = weighted_probs.argmax(axis=1)
-
-        weighted_metrics = compute_metrics(labels, weighted_preds)
-        weighted_auc = compute_auc_from_probs(labels, weighted_probs)
-
-        for k, v in weighted_metrics.items():
-            log(f, f"{k}: {v:.4f}")
-
-        log(f, f"AUC: {weighted_auc:.4f}")
-
-        log(f, "\n===== END OF REPORT =====")
+        weighted_probs = weighted_vote(
+            all_model_probs.cpu().numpy(),
+            weights=config.ensemble_weights,
+            viral_boost=config.viral_boost,
+        )
+        _write_metric_block(
+            file,
+            "WEIGHTED VOTING",
+            labels,
+            weighted_probs,
+            labels=config.model_names,
+        )
+        log(file, "\n===== END OF REPORT =====")
 
     print(f"\n📄 Report saved at: {report_path}")
+    return report_path
+
+
+def main(argv: Optional[Sequence[str]] = None) -> Path:
+    config = parse_args(argv)
+    return run(config)
 
 
 if __name__ == "__main__":

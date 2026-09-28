@@ -10,9 +10,6 @@ const nextConfig: NextConfig = {
   },
   // The frontend is static; all API calls go to the backend URL.
   // Set NEXT_PUBLIC_BACKEND_URL in your hosting environment.
-  async rewrites() {
-    return [];
-  },
 };
 
 export default nextConfig;

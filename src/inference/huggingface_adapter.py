@@ -208,7 +208,7 @@ def _prediction_from_scores(
                 f"missing expected class(es): {sorted(missing)!r}"
             )
 
-    top_label = max(probabilities, key=probabilities.get)
+    top_label = max(probabilities, key=lambda label: probabilities[label])
     return ModelPrediction(
         label=top_label,
         confidence=probabilities[top_label],

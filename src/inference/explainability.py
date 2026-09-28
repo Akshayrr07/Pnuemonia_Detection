@@ -108,7 +108,7 @@ def generate_heatmap(
 
     Returns None when Grad-CAM fails for any reason.
     """
-    import torchvision.transforms as T
+    import torch
 
     tensor, original_size = _preprocess(image)
     tensor = tensor.to(device)
@@ -154,7 +154,7 @@ def generate_heatmap(
 
         # Upsample to original image size
         cam_img = Image.fromarray((cam * 255).astype(np.uint8))
-        cam_img = cam_img.resize(original_size, Image.BICUBIC)
+        cam_img = cam_img.resize(original_size, Image.Resampling.BICUBIC)
 
         # Composite over original
         overlay = _overlay_heatmap(cam_img, image.convert("RGB"))
@@ -162,7 +162,7 @@ def generate_heatmap(
             scale = overlay_max_side / max(overlay.width, overlay.height)
             overlay = overlay.resize(
                 (int(overlay.width * scale), int(overlay.height * scale)),
-                Image.LANCZOS,
+                Image.Resampling.LANCZOS,
             )
 
         return _image_to_b64(overlay)
