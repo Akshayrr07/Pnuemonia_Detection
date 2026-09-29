@@ -1,3 +1,5 @@
+import os
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -24,11 +26,15 @@ def _resolve_split_hash(
     path,
     split_hashes: dict[str, str] | None,
 ) -> str:
-    if split_hashes is None:
+    if split_hashes is not None:
+        if split not in split_hashes:
+            raise ValueError(f"split_hashes is missing the '{split}' split")
+        return split_hashes[split]
+    # Datasets may be built from an in-memory frame instead of a manifest on
+    # disk; there is no file to fingerprint in that case.
+    if isinstance(path, (str, os.PathLike)):
         return hash_file(path)
-    if split not in split_hashes:
-        raise ValueError(f"split_hashes is missing the '{split}' split")
-    return split_hashes[split]
+    return ""
 
 
 def get_dataloaders(
@@ -43,6 +49,7 @@ def get_dataloaders(
     config=None,
     split_hashes=None,
     return_metadata=False,
+    raw_root=None,
 ):
 
     if num_workers < 0:
@@ -52,17 +59,34 @@ def get_dataloaders(
 
     seed = seed_everything(seed, deterministic=deterministic)
 
+    def _build_train_transform():
+        # Callers and tests may still expose the historical no-argument
+        # builder, so only forward the seed when the callable accepts it.
+        try:
+            return get_train_transforms(seed=_transform_seed(seed, "train"))
+        except TypeError:
+            return get_train_transforms()
+
+    # Only forward raw_root when the caller set one, so dataset
+    # implementations predating the explicit-root option keep working with
+    # their own default resolution.
+    def _dataset_kwargs():
+        return {} if raw_root is None else {"raw_root": raw_root}
+
     train_dataset = PneumoniaDataset(
         train_csv,
-        transform=get_train_transforms(seed=_transform_seed(seed, "train")),
+        transform=_build_train_transform(),
+        **_dataset_kwargs(),
     )
     val_dataset = PneumoniaDataset(
         val_csv,
         transform=get_val_transforms(),
+        **_dataset_kwargs(),
     )
     test_dataset = PneumoniaDataset(
         test_csv,
         transform=get_val_transforms(),
+        **_dataset_kwargs(),
     )
 
     use_cuda = torch.cuda.is_available()
