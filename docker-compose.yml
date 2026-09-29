@@ -11,6 +11,7 @@ services:
       - "8000:8000"
     environment:
       - PYTHONPATH=/app
+      - APP_ENV=${APP_ENV:-development}
       - HF_BINARY_MODEL_ID=${HF_BINARY_MODEL_ID:-}
       - HF_SUBTYPE_MODEL_ID=${HF_SUBTYPE_MODEL_ID:-}
       - HF_TOKEN=${HF_TOKEN:-}
@@ -27,7 +28,9 @@ services:
       - MAX_IMAGE_HEIGHT=${MAX_IMAGE_HEIGHT:-8192}
       - MAX_IMAGE_PIXELS=${MAX_IMAGE_PIXELS:-40000000}
       - MAX_IMAGE_FRAMES=${MAX_IMAGE_FRAMES:-1}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      # Keep unset empty so APP_ENV=production denies CORS by default; the
+      # application supplies explicit localhost origins in development.
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
       # Optional Grad-CAM settings. The volume is opt-in and the image does not
       # install optional explainability packages by default.
       - LOCAL_MODEL_PATH=${LOCAL_MODEL_PATH:-}
@@ -43,9 +46,9 @@ services:
       - ALL
     restart: unless-stopped
     healthcheck:
-      # Readiness-compatible: /health remains HTTP 200 while pipeline_ready
-      # reports whether hosted-model configuration initialized successfully.
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      # Readiness-gated: /ready returns 503 until the inference pipeline is
+      # initialized, so the container reports healthy only when ready.
+      test: ["CMD", "python", "-c", "import json, urllib.request; body=json.load(urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)); raise SystemExit(0 if body.get('pipeline_ready') is True else 1)"]
       interval: 30s
       timeout: 5s
       start_period: 10s

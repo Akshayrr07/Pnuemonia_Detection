@@ -24,6 +24,7 @@ Expected environment variables (see src/inference/settings.py):
     MAX_IMAGE_PIXELS      (optional, default 40000000)
     MAX_IMAGE_FRAMES      (optional, default 1)
     ALLOWED_ORIGINS       (optional, comma-separated CORS origins)
+    APP_ENV               (optional, development or production; defaults to development)
 
 Optional explainability (Grad-CAM) environment variables:
     LOCAL_MODEL_PATH      path to a local .pt checkpoint (enables heatmap generation)
@@ -46,6 +47,7 @@ from typing import Optional
 import requests
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from PIL import Image
 from pydantic import BaseModel
 
@@ -116,6 +118,42 @@ def _ensure_inference_runtime():
             )
     return _inference_executor, _inference_guard
 
+# CORS defaults to a small, explicit development allowlist. Production must
+# opt in with APP_ENV/ENVIRONMENT=production and an explicit origin list; an
+# unset or blank allowlist is never widened to "*".
+DEVELOPMENT_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+]
+_app_environment = (
+    os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "development")) or "development"
+).strip().lower()
+_is_development = _app_environment in {"development", "dev", "local"}
+
+
+def _resolve_cors_origins() -> tuple[list[str], bool]:
+    """Return explicit origins and whether credentials are safe to enable.
+
+    A wildcard is deliberately discarded. This keeps the service fail-closed
+    and prevents the browser-observable ``Access-Control-Allow-Origin: *`` plus
+    ``Access-Control-Allow-Credentials: true`` combination. If a wildcard is
+    present alongside concrete origins, the concrete origins are retained and
+    credentials are disabled for the entire policy.
+    """
+    raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+    configured = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    if not configured:
+        origins = list(DEVELOPMENT_ALLOWED_ORIGINS) if _is_development else []
+        return origins, True
+
+    has_wildcard = any("*" in origin for origin in configured)
+    origins = [origin for origin in configured if "*" not in origin]
+    return origins, not has_wildcard
+
 # Optional explainability (Grad-CAM) configuration.
 LOCAL_MODEL_PATH = os.getenv("LOCAL_MODEL_PATH")
 LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "resnet")
@@ -181,16 +219,12 @@ app = FastAPI(
 )
 
 # CORS
-_raw_origins = __import__("os").getenv("ALLOWED_ORIGINS", "")
-if _raw_origins.strip():
-    _allow_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
-else:
-    _allow_origins = ["*"]
+_allow_origins, _allow_credentials = _resolve_cors_origins()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allow_origins,
-    allow_credentials=True,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -209,6 +243,32 @@ class HealthResponse(BaseModel):
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health():
     return HealthResponse(pipeline_ready=_pipeline is not None)
+
+
+class LiveResponse(BaseModel):
+    status: str = "ok"
+
+
+@app.get("/live", response_model=LiveResponse, tags=["System"])
+async def live():
+    """Report process liveness without depending on the inference pipeline."""
+    return LiveResponse()
+
+
+class ReadinessResponse(BaseModel):
+    status: str
+    pipeline_ready: bool
+
+
+@app.get("/ready", response_model=ReadinessResponse, tags=["System"])
+async def ready():
+    """Report whether the inference pipeline is available for traffic."""
+    if _pipeline is None:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "pipeline_ready": False},
+        )
+    return ReadinessResponse(status="ok", pipeline_ready=True)
 
 
 # ---------------------------------------------------------------------------
