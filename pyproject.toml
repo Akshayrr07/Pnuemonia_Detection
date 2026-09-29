@@ -1,0 +1,9 @@
+[project]
+name = "pneumonia-detection"
+version = "0.1.0"
+description = "Pneumonia Detection from Chest X-rays"
+requires-python = ">=3.11,<3.12"
+
+[tool.uv]
+# Keep the production and research environments independent. The supported
+# deployment/research runtime is Python 3.11.

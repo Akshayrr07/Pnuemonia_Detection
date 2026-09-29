@@ -4,9 +4,11 @@ Production Python API for the Pneumonia Detection system.
 
 ## Overview
 
-The backend exposes two endpoints:
+The backend exposes three service/prediction endpoints:
 
-- `GET /health` — service health and pipeline readiness check.
+- `GET /live` — process liveness, independent of inference availability.
+- `GET /ready` — readiness check; returns `503` until the inference pipeline is initialized.
+- `GET /health` — legacy combined status response.
 - `POST /predict` — accept a chest X-ray image upload and return a hierarchical prediction.
 
 The prediction flow follows the research result:
@@ -29,7 +31,9 @@ Shared inference code lives in `src/inference/` and is imported directly by the 
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.11.x (the supported runtime for this backend)
+- `uv` is recommended for reproducible installs; a standard virtual environment
+  and `pip` also work
 - Setuptools-compatible install of the repo so that `src/` is importable, or run with `PYTHONPATH=.`
 
 ## Install
@@ -37,7 +41,17 @@ Shared inference code lives in `src/inference/` and is imported directly by the 
 From the repository root:
 
 ```bash
-pip install -r backend/requirements.txt
+uv venv --python 3.11
+uv pip install -r backend/requirements.txt
+```
+
+`backend/requirements.in` contains the supported ranges and
+`backend/constraints.txt` records the resolved Python 3.11 metadata. If the
+optional local Grad-CAM path is needed, install its separate dependency set
+as well:
+
+```bash
+uv pip install -r backend/requirements-explainability.txt
 ```
 
 If `src/` is not installed as a package, set the Python path:
@@ -65,11 +79,17 @@ export HF_API_BASE_URL=https://api-inference.huggingface.co/models
 export PNEUMONIA_THRESHOLD=0.5
 export SUBTYPE_THRESHOLD=0.5
 export HF_REQUEST_TIMEOUT_SECONDS=60
+export PREDICTION_DEADLINE_SECONDS=65
+export INFERENCE_MAX_CONCURRENCY=4
+export INFERENCE_WORKERS=4
+export INFERENCE_RATE_LIMIT_PER_SECOND=0
 export UPLOAD_MAX_SIZE_MB=10
 export ALLOWED_ORIGINS=http://localhost:3000,https://example.com
+export APP_ENV=production
 ```
 
-- `ALLOWED_ORIGINS` is a comma-separated list of CORS origins. When unset, the backend allows all origins for local development.
+- `ALLOWED_ORIGINS` is a comma-separated list of CORS origins. Development defaults to explicit local frontend origins (`localhost`/`127.0.0.1` on ports 3000, 5173, and 5174); production defaults to deny unless explicit origins are configured.
+- Wildcard origins are disabled rather than combined with credentials.
 - `UPLOAD_MAX_SIZE_MB` controls the maximum accepted upload size.
 
 ## Run locally
@@ -81,6 +101,24 @@ PYTHONPATH=. uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
 The API doc UI is available at `http://localhost:8000/docs`.
 
 ## Endpoints
+
+### `GET /live`
+
+Returns `200` when the API process is alive, even if the inference pipeline is
+not ready:
+
+```json
+{"status":"ok"}
+```
+
+### `GET /ready`
+
+Returns `200` with `pipeline_ready: true` when the inference pipeline is ready.
+Returns `503` with `pipeline_ready: false` while initialization is unavailable:
+
+```json
+{"status":"not_ready","pipeline_ready":false}
+```
 
 ### `GET /health`
 
@@ -138,16 +176,26 @@ If pneumonia is not detected, `subtype_prediction` and `subtype_confidence` are 
 - Accepted content types: `image/jpeg`, `image/png`, `image/jpg`.
 - Accepted file extensions: `.jpg`, `.jpeg`, `.png`.
 - Uploads exceeding `UPLOAD_MAX_SIZE_MB` are rejected.
+- Image dimensions must not exceed `MAX_IMAGE_WIDTH` × `MAX_IMAGE_HEIGHT`, and
+  total pixels must not exceed `MAX_IMAGE_PIXELS` (defaults: 8192 × 8192 and
+  40,000,000 pixels).
+- Decoded images must be PNG or JPEG, even when the filename/content type says
+  otherwise. Only single-frame images are accepted.
+- Pillow decompression-bomb warnings and errors are rejected before inference.
 - Corrupt or undecodable images are rejected with a `400` error.
 
 ### Errors
 
 - `400` — invalid file type, too large, unsupported extension, or undecodable image.
-- `503` — prediction pipeline not available, usually because required environment variables are missing.
+- `503` — prediction pipeline not available, or the process-local inference capacity guard is full.
+- `504` — the total prediction deadline elapsed.
+- `502` — the hosted inference provider returned a known or unhandled provider error; raw upstream response bodies are not returned.
 
 ## CORS
 
-The backend includes CORS middleware. For local frontend development, either leave `ALLOWED_ORIGINS` unset for permissive development mode, or set it explicitly:
+The backend includes fail-closed CORS middleware. Development defaults to
+explicit local origins; set `APP_ENV=production` and configure production
+origins explicitly:
 
 ```bash
 export ALLOWED_ORIGINS=http://localhost:3000

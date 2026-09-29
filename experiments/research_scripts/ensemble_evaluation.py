@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from legacy_imports_compat import PneumoniaDataset, get_resnet18, get_mobilenet, get_efficientnet, CustomCNN
+from src.inference.checkpoint import load_trusted_checkpoint
 
 
 # =========================
@@ -53,16 +54,44 @@ test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 # ============================================================
 
 custom_model = CustomCNN(num_classes=3).to(device)
-custom_model.load_state_dict(torch.load("../saved_models/custom.pt"))
+custom_model.load_state_dict(
+    load_trusted_checkpoint(
+        "../saved_models/custom.pt",
+        map_location=device,
+        expected_task="3_class",
+    ),
+    strict=True,
+)
 
 mobilenet_model = get_mobilenet(num_classes=3, freeze=False).to(device)
-mobilenet_model.load_state_dict(torch.load("../saved_models/mobilenet.pt"))
+mobilenet_model.load_state_dict(
+    load_trusted_checkpoint(
+        "../saved_models/mobilenet.pt",
+        map_location=device,
+        expected_task="3_class",
+    ),
+    strict=True,
+)
 
 efficientnet_model = get_efficientnet(num_classes=3, freeze=False).to(device)
-efficientnet_model.load_state_dict(torch.load("../saved_models/efficientnet.pt"))
+efficientnet_model.load_state_dict(
+    load_trusted_checkpoint(
+        "../saved_models/efficientnet.pt",
+        map_location=device,
+        expected_task="3_class",
+    ),
+    strict=True,
+)
 
 resnet_model = get_resnet18(num_classes=3, freeze=False).to(device)
-resnet_model.load_state_dict(torch.load("../saved_models/resnet.pt"))
+resnet_model.load_state_dict(
+    load_trusted_checkpoint(
+        "../saved_models/resnet.pt",
+        map_location=device,
+        expected_task="3_class",
+    ),
+    strict=True,
+)
 
 models = [
     custom_model,
@@ -128,12 +157,17 @@ print(classification_report(labels, ensemble_preds))
 # 2️⃣ WEIGHTED SOFT VOTING
 # ============================================================
 
-# Replace these with actual validation accuracies if available
-weights = torch.tensor([0.74, 0.77, 0.75, 0.76])
-weights = weights / weights.sum()
+# Weights are an explicit input to this legacy research script. Use equal
+# weights unless a separately prepared, documented evaluation run supplies a
+# validated weighting. Do not tune these values on the test set.
+weights = None  # equal weighting by default
+if weights is None:
+    weights = torch.full((len(models),), 1.0 / len(models))
+else:
+    weights = torch.as_tensor(weights, dtype=all_model_probs.dtype)
+    weights = weights / weights.sum()
 
 weighted_probs = torch.zeros_like(all_model_probs[0])
-
 for i in range(len(models)):
     weighted_probs += weights[i] * all_model_probs[i]
 

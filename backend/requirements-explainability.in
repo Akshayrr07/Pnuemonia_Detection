@@ -1,0 +1,10 @@
+# Optional explainability dependencies for the local Grad-CAM path.
+# Keep these separate from the hosted-inference backend requirements:
+#   uv pip install -r backend/requirements-explainability.txt
+# The packages intentionally do not use CUDA-local `+cu...` pins. Select a
+# CUDA build with `uv pip install --torch-backend=cu124 -r
+# backend/requirements-explainability.txt`; use the default published wheels
+# for a CPU installation.
+numpy>=1.26,<3
+torch>=2.2,<3
+torchvision>=0.17,<1

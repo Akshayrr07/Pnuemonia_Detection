@@ -53,6 +53,9 @@ class InferenceSettings:
             joined = ", ".join(missing)
             raise InferenceSettingsError(f"Missing required environment variable(s): {joined}")
 
+        assert binary_model_id is not None
+        assert subtype_model_id is not None
+
         return cls(
             binary_model_id=binary_model_id,
             subtype_model_id=subtype_model_id,
