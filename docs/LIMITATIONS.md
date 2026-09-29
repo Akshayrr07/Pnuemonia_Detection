@@ -22,9 +22,9 @@ The production path calls the Hugging Face Inference API. Whatever model is host
 
 The research metrics in this repository (93.78% binary, 75.67% subtype) were produced during offline experimentation. They describe the research pipeline, not necessarily the identically-configured live endpoint.
 
-### 4. Dataset scope is limited
+### 4. Dataset scope and provenance are limited
 
-The dataset is a curated combination of three public Kaggle chest X-ray sources, deduplicated to 5,891 unique X-rays and split 70/15/15. It is a reasonable research dataset, but it is not a large, multi-site, demographically diverse clinical corpus. Sensitivity to age, sex, device manufacturer, view position (AP vs PA), and co-morbidities is not separately characterized.
+The checked-in registry contains 5,891 records from two current source labels (`dataset_1` and `dataset_2`); a historical duplicate log also contains `dataset_3` records that are not in the current registry. Exact source URLs, licenses, retrieval versions, and a source manifest are unresolved, so the earlier three-source description is not verified. The research split is 70/15/15, but it is not a large, multi-site, demographically diverse clinical corpus. Sensitivity to age, sex, device manufacturer, view position (AP vs PA), and co-morbidities is not separately characterized.
 
 ### 5. Image input assumptions
 
@@ -38,6 +38,8 @@ The backend is stateless between requests. It does not store uploaded images, pr
 - There is no way to review a previous result.
 - There is no feedback loop from clinical outcomes to model improvement.
 
+This stateless design is not a privacy guarantee for a deployed environment. Browser, reverse proxy, container, hosting, and model-provider logs may retain requests or image bytes. Do not use the public demo with real patient data without an approved privacy, security, consent, retention, and access-control review.
+
 ### 7. Explainability is gated behind a local checkpoint
 
 Grad-CAM is implemented (`src/inference/explainability.py`) and wired into the backend, but it only runs when `LOCAL_MODEL_PATH` points to a real checkpoint file. Without a checkpoint, `heatmap_b64` is always `null` and the heatmap overlay in the frontend has nothing to show.
@@ -46,7 +48,7 @@ Hugging Face Inference API is a black-box HTTP endpoint — it returns labels an
 
 ### 8. Deployment environment specifics
 
-- **Frontend** is deployed to Cloudflare Pages as a static export. This is fast and cheap, but it means the frontend cannot do server-side rendering, serverless functions, or direct backend calls without configuring `NEXT_PUBLIC_BACKEND_URL` to point at the deployed backend. When that var is unset, the frontend falls back to same-origin, which is only correct if the backend is served from the same domain.
+- **Frontend** is deployed to Cloudflare Pages as a static export. This is fast and cheap, but it means the frontend cannot do server-side rendering, serverless functions, or direct backend calls without configuring `NEXT_PUBLIC_BACKEND_URL` **in the frontend build environment** and rebuilding the static export. When that build-time var is unset, the frontend falls back to same-origin, which is only correct if the backend is served from the same domain.
 - **Backend** is containerized with Docker. The Dockerfile is known to work on this machine. It has not been tested on a different host OS or a different cloud container runtime. The healthcheck, env var injection, and CORS config should all be re-verified when deploying to a new environment.
 - **Docker build size (~320 MB)** is acceptable for a Python ML service but could be reduced with a multi-arch or distroless runtime if image size becomes a deployment constraint.
 
@@ -78,7 +80,7 @@ Hugging Face Inference API is a black-box HTTP endpoint — it returns labels an
 
 ### Long-term
 
-11. **Clinical validation** — any move toward real clinical use would require a proper validation study on an independent dataset, withInstitutional Review Board (IRB) approval where applicable, and regulatory review.
+11. **Clinical validation** — any move toward real clinical use would require a proper validation study on an independent dataset, with Institutional Review Board (IRB) approval where applicable, and regulatory review.
 
 12. **Continuous monitoring** — track prediction distributions, latency, error rates, and model version over time. Alert on distribution shift or sudden degradation.
 

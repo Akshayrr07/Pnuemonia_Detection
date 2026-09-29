@@ -11,7 +11,8 @@ downloads/
 eggs/
 .eggs/
 # Source code is tracked even when a directory is named `lib`.
-# Root-level Python build output only; application directories named lib are tracked.
+# Root-level Python build output only; application directories named lib are
+# tracked.
 /lib/
 /lib64/
 parts/
@@ -52,19 +53,31 @@ Thumbs.db
 .ipynb_checkpoints/
 *.ipynb
 
-# Data & Models (large files)
-data/raw_datasets/
-saved_models/*.pt
-outputs/
+# Data & models (large or sensitive artifacts)
+/data/raw_datasets/
+/saved_models/
+/checkpoints/
+/outputs/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.tflite
+*.h5
+*.keras
+*.joblib
+*.pkl
 
 # Logs & Reports
 *.log
 reports/*.txt
 
-# Environment
+# Environment and secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!**/.env.example
 
 # Misc
 *.bak

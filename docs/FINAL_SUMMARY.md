@@ -2,12 +2,14 @@
 
 ## What this project is
 
-A research-to-production system for detecting pneumonia from chest X-ray images, built end to end: dataset construction, multi-model research, hierarchical inference design, a FastAPI backend, a Next.js frontend, Grad-CAM explainability, and containerized deployment.
+A research-to-application system for detecting pneumonia from chest X-ray images, with dataset construction, multi-model research, hierarchical inference design, a FastAPI backend, a Next.js frontend, Grad-CAM explainability, and containerized deployment artifacts.
 
-The system is live in two parts:
+The repository contains two application layers:
 
 - **Frontend:** `https://pneumonia-detection-8fz.pages.dev` — Cloudflare Pages static export of the Next.js app.
 - **Backend:** containerized with Docker; not yet deployed to a live host in this environment, but built and tested locally.
+
+The frontend URL is build-time configured: set `NEXT_PUBLIC_BACKEND_URL` before `npm run build` (or the hosting provider's build), then rebuild/redeploy when it changes. The backend is not live in this environment, so the published frontend may not be able to serve predictions without a separately deployed backend.
 
 ## What it does
 
@@ -17,6 +19,12 @@ A user uploads a chest X-ray (JPEG or PNG) through the web interface. The backen
 2. **Stage 2 — Bacterial vs Viral.** Only if pneumonia is detected does the system classify the subtype. This is harder (research accuracy: 75.67%) and is reported honestly as a lower-confidence result.
 
 The response is a structured JSON object containing the primary prediction, confidence, optional subtype, per-class probabilities, model-level outputs, and a medical disclaimer.
+
+## Safety, privacy, and medical use
+
+- Do not upload real patient data or identifiable chest X-rays to the public demo. The browser, hosting provider, reverse proxy, and hosted model provider may process or log image bytes.
+- Keep `HF_TOKEN` and other credentials server-side. `NEXT_PUBLIC_*` values are embedded in browser-visible build output and must never contain secrets.
+- This is an educational and research system, not a medical device or diagnostic service. It has not been clinically validated or cleared for diagnosis, treatment, triage, or other clinical decisions. A qualified healthcare professional must review the original image and clinical context.
 
 ## Why hierarchical
 
@@ -28,7 +36,9 @@ Splitting the problem into a binary pneumonia-detection stage followed by a subt
 
 ### Dataset
 
-Three public Kaggle chest X-ray datasets were audited, labeled, deduplicated with SHA256 + perceptual hash, and merged into a single controlled dataset of **5,891 unique X-rays**. The normalized class set is:
+The checked-in, deduplicated `data/metadata/master_registry.csv` contains **5,891 records from two current source labels** (`dataset_1` and `dataset_2`). The historical `duplicates_removed.csv` log also contains `dataset_3` records, but that source is not in the current registry. The earlier three-source claim is **provenance-unverified**: the repository has no verified source URLs, licenses, retrieval versions, or source manifest, and none are inferred here.
+
+The normalized class set is:
 
 - Normal
 - Bacterial Pneumonia
@@ -82,7 +92,7 @@ A Next.js application with:
 
 ### Deployment
 
-- **Frontend:** Cloudflare Pages, static export, deployed via `wrangler pages deploy`.
+- **Frontend (historical deployment record):** Cloudflare Pages static export, with the recorded URL above.
 - **Backend:** Docker image (`python:3.11-slim`), healthcheck on `/health`, env-var-driven configuration, `docker-compose.yml` for local orchestration.
 - **Env vars:** documented in `.env.example` at the repository root.
 
@@ -96,7 +106,7 @@ A Next.js application with:
 
 4. **Docker for the backend, static export for the frontend.** Cloudflare Workers Python cannot run Pillow's C extensions or `requests`, so the backend is containerized. The frontend is a static export that is cheap and fast to serve on Cloudflare Pages.
 
-5. **No image storage, no audit log.** The backend is stateless and does not persist uploads or predictions. This is a deliberate privacy choice but means there is no feedback loop or audit trail.
+5. **No application-level image storage or audit log.** The backend is stateless and does not persist uploads or predictions in its own request flow. Deployed infrastructure may still log requests; this design choice is not a complete privacy guarantee and means there is no application feedback loop or audit trail.
 
 ## Research results (accuracy only)
 
@@ -111,7 +121,7 @@ Precision, recall, F1, ROC/AUC, sensitivity, and specificity have not been compu
 ## What is not shipped
 
 - **Trained checkpoints.** No `.pt` files are in the repository. The production path does not need them, but Grad-CAM and the legacy Streamlit app do.
-- **Raw datasets.** Not included due to size.
+- **Raw datasets and source manifest.** Not included due to size; exact source URLs, licenses, and retrieval versions remain unresolved.
 - **Live backend deployment.** The backend Docker image is built and tested locally; a live deployment requires a Docker-capable host and real Hugging Face model repos with uploaded checkpoints.
 - **Clinical validation.** This is an educational and research system. It is not certified, validated for clinical use, or a medical device.
 
@@ -146,10 +156,10 @@ app/                (optional) Streamlit demo app using the pipeline
 2. Create Hugging Face model repos and upload the checkpoints.
 3. Set `HF_BINARY_MODEL_ID` and `HF_SUBTYPE_MODEL_ID` in `.env`.
 4. Deploy the backend Docker container to a cloud host.
-5. Set `NEXT_PUBLIC_BACKEND_URL` on the frontend deployment to point at the live backend.
+5. Set `NEXT_PUBLIC_BACKEND_URL` in the frontend **build environment** to point at the live backend, then rebuild and redeploy the static frontend.
 6. (Optional) Set `LOCAL_MODEL_PATH` to enable Grad-CAM in the backend and frontend.
 7. Add model cards, compute sensitivity/specificity, and tune thresholds before any clinical-adjacent use.
 
 ## Status
 
-This is the final Phase 9 polish commit. The system is complete end to end: research, inference design, backend, frontend, explainability, deployment artifacts, documentation, diagrams, demo instructions, and a written limitations/future-scope section. The one Phase 9 sub-task deferred by the user is screenshots, which are intentionally not included here.
+The repository includes research, inference design, backend, frontend, explainability, deployment artifacts, documentation, diagrams, demo instructions, and a written limitations/future-scope section. Screenshots are intentionally not included. A live backend deployment, hosted model repositories, verified dataset provenance, clinical validation, and a production-ready medical-use posture remain unfinished; see `docs/LIMITATIONS.md` and `docs/PROJECT_PROGRESS.md`.

@@ -1,18 +1,19 @@
 # Project Progress
 
-This document tracks what has been completed in the current development branch and what remains to be implemented.
+This document tracks completed phases, the current documentation reconciliation, and work that remains open.
 
 ## Current Branch
 
-Active development branch:
+Documentation reconciliation branch:
 
 ```text
-dev
+docs/reconcile-audit-docs
 ```
 
-Development is intentionally happening away from `main`.
+The repository base is `main` at the audit start point; this branch contains
+documentation and repository-hygiene reconciliation only.
 
-## Completed Work
+## Historical Work Record
 
 ### Phase 1: Documentation Foundation
 
@@ -27,7 +28,7 @@ This documentation explains:
 
 - the project goal
 - controlled dataset construction
-- Kaggle dataset strategy
+- dataset strategy with explicit provenance status
 - duplicate removal using SHA256
 - master registry design
 - 70/15/15 train-validation-test split
@@ -38,7 +39,7 @@ This documentation explains:
 - Cloudflare frontend/backend deployment direction
 - Docker as a portable backend deployment option
 
-The documentation intentionally does not frame the project as using public hosted models and does not present the system as an API-wrapper demo.
+The documentation describes the hosted-model boundary and the API responsibilities without treating a public hosted model or a mock/demo response as a verified production model.
 
 ### Phase 2: Repository Structure Refactor
 
@@ -92,7 +93,7 @@ What this layer provides:
 - threshold-aware subtype result handling
 - backend-ready JSON response format
 
-Expected environment variables:
+Environment variables for hosted inference:
 
 ```text
 HF_BINARY_MODEL_ID
@@ -104,7 +105,7 @@ SUBTYPE_THRESHOLD
 HF_REQUEST_TIMEOUT_SECONDS
 ```
 
-Verification completed:
+Historical verification record:
 
 - Python syntax compile passed.
 - Mocked hierarchical prediction passed without making network calls.
@@ -147,25 +148,25 @@ This is preferred over a single three-class classifier because the binary pneumo
 
 ### Hosted Model Layer
 
-Models are intended to be hosted and managed through Hugging Face. The application backend calls the hosted model layer and handles orchestration, preprocessing, thresholds, and response formatting.
+The deployment design hosts models on Hugging Face. Model repositories and checkpoints are not included in this repository; the application backend calls the configured hosted model layer and handles orchestration, preprocessing, thresholds, and response formatting.
 
 ### Cloud Application Layer
 
-The frontend is planned for React or Next.js, with Cloudflare Pages as the preferred hosting direction.
-
-The backend is planned as a Python API. Cloudflare Workers can be considered if the final dependency set is compatible. Docker support remains important for portable backend deployment.
+The repository includes a Next.js frontend and a FastAPI Python backend. Cloudflare Pages is the documented frontend host; the backend is containerized for portable deployment. A live backend still requires deployment-specific configuration and network access.
 
 ### Dataset Handling
 
-The raw dataset is not committed to GitHub because of its size. The repository should document Kaggle dataset URLs and provide scripts/configuration for users who want to rebuild the data locally.
+The raw dataset is not committed to GitHub because of its size. The repository provides scripts/configuration for users who want to rebuild the data locally, but exact dataset URLs, licenses, retrieval versions, and source manifests remain **provenance-required** and unresolved.
 
-## Remaining Work
+## Historical Phase Record and Open Follow-up
+
+The application and deployment artifacts described below are present in the repository. The phase sections that follow are a historical record: a historical “completed” label means the artifact was added at that phase, not that all deployment or validation work is finished. Items still requiring external access, credentials, or follow-up validation are called out explicitly.
 
 ### Phase 4: FastAPI Backend
 
 Built the production Python API around the inference layer.
 
-Completed tasks:
+Historical completed tasks:
 
 - created FastAPI app under `backend/app.py`
 - added `GET /health` with pipeline readiness check
@@ -181,7 +182,7 @@ Completed tasks:
 - added `backend/README.md` with local run instructions
 - added `backend/test_phase4.py` verification test
 
-Verification completed:
+Historical verification record:
 
 - Python syntax compile passed.
 - All inference imports resolved with `PYTHONPATH=.`.
@@ -206,7 +207,7 @@ Current endpoint summary:
 
 Built the Next.js frontend.
 
-Completed tasks:
+Historical completed tasks:
 
 - scaffolded Next.js 16 app with TypeScript and App Router
 - built upload dropzone with click-to-upload and file input
@@ -222,7 +223,7 @@ Completed tasks:
 - added backend connectivity indicator on mount
 - disabled prediction button when backend is unavailable
 
-Verification completed:
+Historical verification record:
 
 - TypeScript compilation passed (exit 0).
 - Next.js production build passed (static page generated for `/`).
@@ -256,14 +257,15 @@ npm install
 npm run dev
 ```
 
-The frontend reads `NEXT_PUBLIC_BACKEND_URL` to locate the backend.
-When unset it falls back to the same origin.
+The frontend build embeds `NEXT_PUBLIC_BACKEND_URL` to locate the backend.
+When unset at build time, it falls back to the same origin.
 
 ### Phase 6: Research Results Integration
 
-Make the research work visible in the application and documentation.
+The research results page and its accuracy-only documentation are present.
+The original task list is retained below for history.
 
-Tasks:
+Historical tasks:
 
 - add metrics section/page
 - document 3-class results
@@ -275,9 +277,9 @@ Tasks:
 
 ### Phase 7: Explainability
 
-Add explainability once the prediction flow is stable.
+The local-model Grad-CAM path is implemented and gated by `LOCAL_MODEL_PATH`.
 
-Completed tasks:
+Historical completed tasks:
 
 - decided Grad-CAM execution location: local-model path only, gated behind
   `LOCAL_MODEL_PATH` env var; the Hugging Face hosted path is a black-box
@@ -298,7 +300,7 @@ Completed tasks:
   heatmap failure paths
 - added heatmap section styles to `globals.css`
 
-Verification completed:
+Historical verification record:
 
 - TypeScript compilation passed.
 - Next.js production build passed.
@@ -326,9 +328,11 @@ export LOCAL_MODEL_NAME=resnet   # resnet | mobilenet | efficientnet | densenet
 
 ### Phase 8: Deployment
 
-Deploy the system.
+Frontend and Docker deployment artifacts are present. A historical frontend
+deployment URL is recorded, but live backend/model hosting and end-to-end
+external validation remain follow-up work.
 
-Completed tasks:
+Historical completed tasks:
 
 - deploy frontend to Cloudflare Pages:
   - configured `next.config.ts` for static export (`output: "export"`,
@@ -336,8 +340,8 @@ Completed tasks:
     - built static export (`/`, `/research`, `/_not-found`)
     - deployed to Cloudflare Pages project `pneumonia-detection`
     - live URL: `https://pneumonia-detection-8fz.pages.dev`
-    - frontend reads `NEXT_PUBLIC_BACKEND_URL` to locate the backend;
-      when unset, falls back to same origin
+    - frontend build embeds `NEXT_PUBLIC_BACKEND_URL` to locate the backend;
+      when unset at build time, falls back to same origin
 - deploy backend via Docker:
     - `Dockerfile`: `python:3.11-slim`, installs `backend/requirements.txt`,
       copies `backend/` + `src/`, runs `uvicorn` on port 8000 with a
@@ -353,9 +357,10 @@ Completed tasks:
       `HF_BINARY_MODEL_ID`, `HF_SUBTYPE_MODEL_ID`, `HF_TOKEN`,
       `HF_API_BASE_URL`, `PNEUMONIA_THRESHOLD`, `SUBTYPE_THRESHOLD`,
       `HF_REQUEST_TIMEOUT_SECONDS`, `UPLOAD_MAX_SIZE_MB`, `ALLOWED_ORIGINS`,
-      and the optional `LOCAL_MODEL_PATH`/`LOCAL_MODEL_NAME` for Grad-CAM
+      the optional `LOCAL_MODEL_PATH`/`LOCAL_MODEL_NAME` for Grad-CAM, and
+      the frontend build-time `NEXT_PUBLIC_BACKEND_URL`
 
-Not completed in this environment:
+Historical remaining-work record:
 
 - hosting model checkpoints on Hugging Face: no `HF_TOKEN` was available in
   this environment, so model repos were not created and checkpoints were not
@@ -380,7 +385,7 @@ Not completed in this environment:
   `api-inference.huggingface.co` with the configured model ids; in a
   deployment with network access and valid model repos, this succeeds.
 
-Verification completed:
+Historical verification record:
 
 - Docker build: `docker build -t pneumonia-api:latest .` succeeds.
 - Docker run: container starts, `/health` returns `pipeline_ready:true`.
@@ -402,9 +407,9 @@ Files added or updated:
 
 ### Phase 9: Final Presentation Polish
 
-Prepare the final project package. All tasks completed except screenshots, which were deferred by the user.
+Prepare the final project package. The documentation and presentation artifacts are present; screenshots remain intentionally excluded.
 
-Completed tasks:
+Historical completed tasks:
 
 - add architecture diagram:
     - `docs/architecture-diagram.html` — interactive dark-themed diagram showing
@@ -439,9 +444,9 @@ Completed tasks:
 
 Deferred by user:
 
-- add screenshots — intentionally not included in this commit.
+- add screenshots — intentionally not included in this repository.
 
-Verification completed:
+Historical verification record:
 
 - `docs/architecture-diagram.html` — self-contained, opens in desktop preview.
 - `docs/workflow-diagram.html` — self-contained, opens in desktop preview.
@@ -460,13 +465,13 @@ Files added:
 Files updated:
 
 - `frontend/README.md` (rewritten from scaffold template to project README)
-- `docs/PROJECT_PROGRESS.md` (Phase 9 marked complete)
+- `docs/PROJECT_PROGRESS.md` (phase status reconciled)
 
-### Phase 9: Final Presentation Polish
+### Phase 9: Final Presentation Polish (historical task list)
 
-Prepare the final project package.
+The original task list is retained for history, but the current repository status is documented above and in `docs/FINAL_SUMMARY.md`.
 
-Tasks:
+Historical tasks:
 
 - add screenshots
 - add architecture diagram
@@ -477,10 +482,10 @@ Tasks:
 
 ## Known Issues To Address
 
-- Current split CSVs contain machine-specific Windows paths and should be regenerated or normalized for portability.
-- Trained `.pt` checkpoints are not present in the repository.
-- Some legacy research scripts may import stale module names and should not be treated as production code.
-- Existing Streamlit app still reflects an older single-step inference prototype.
+- Current split CSVs use portable relative, forward-slash paths; any local regeneration must preserve that format.
+- Trained `.pt` checkpoints are not present in the repository; the hosted production path still requires model repositories and credentials that are not shipped here.
+- Legacy research scripts are retained with a compatibility shim and should not be treated as production code.
+- The Streamlit app is a legacy local demo; the production frontend is the Next.js app.
 
 Issues resolved in Phase 4, Phase 5, and the known-issue cleanup:
 
@@ -509,5 +514,4 @@ Files added or updated during the known-issue cleanup:
 
 Remaining known issues:
 
-- None remaining from the original list. The four items below are resolved.
-- (Optional) Trained `.pt` checkpoints are still not in the repository. This was always expected for the hosted-model design and is documented rather than blocking. If local-model paths (e.g. Grad-CAM explainability or the legacy Streamlit app) are to be demonstrated, checkpoints must be produced or obtained first.
+- The original four repository-structure issues were addressed in the cleanup work. The optional hosted-model and checkpoint follow-up is intentionally still open: trained `.pt` checkpoints and model repositories are not included, and local-model paths require them.

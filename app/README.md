@@ -54,8 +54,10 @@ The app reads the same environment variables as the backend:
 - `SUBTYPE_THRESHOLD` — threshold for the subtype decision
 - `HF_REQUEST_TIMEOUT_SECONDS` — request timeout in seconds
 
-If these are not set, the app will show a configuration error and explain
-how to proceed.
+The two model IDs are required. `HF_TOKEN` is optional for public models, and
+the remaining variables are optional overrides with documented defaults. If a
+required model ID is missing, the app will show a configuration error and
+explain how to proceed.
 
 ## Running the demo
 
@@ -65,7 +67,7 @@ From the project root:
 export HF_BINARY_MODEL_ID=your-binary-model-id
 export HF_SUBTYPE_MODEL_ID=your-subtype-model-id
 export HF_TOKEN=your-huggingface-token
-export HF_API_BASE_URL=https://api.huggingface.co
+export HF_API_BASE_URL=https://api-inference.huggingface.co/models
 export PNEUMONIA_THRESHOLD=0.5
 export SUBTYPE_THRESHOLD=0.5
 export HF_REQUEST_TIMEOUT_SECONDS=30
