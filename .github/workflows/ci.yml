@@ -89,7 +89,7 @@ jobs:
             --index-strategy unsafe-best-match \
             -r backend/requirements-explainability.txt
           uv pip install --python .venv-backend/bin/python \
-            pytest "pandas>=2.1,<3" "scikit-learn>=1.3,<1.6"
+            pytest "pandas>=2.1,<3" "scikit-learn>=1.3,<1.6" "tqdm>=4.66,<5"
 
       - name: Run regression tests
         env:
