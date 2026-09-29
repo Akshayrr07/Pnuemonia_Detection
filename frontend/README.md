@@ -59,12 +59,18 @@ Images are left unoptimized because Cloudflare Pages serves the exported files d
 | Variable | Purpose |
 |---|---|
 | `NEXT_PUBLIC_BACKEND_URL` | URL of the deployed backend API. When unset, the frontend calls the same origin. |
+| `NEXT_PUBLIC_API_TIMEOUT_MS` | Per-request timeout in milliseconds (default `60000`). Requests are aborted when exceeded, so a wedged backend surfaces an error instead of an endless spinner. |
 
 Set this in the **build environment** (Cloudflare Pages build settings, CI, or your local shell before `npm run build`) to point at the deployed backend. `NEXT_PUBLIC_*` values are embedded in the static client bundle at build time, so changing the value after a build has no effect; rebuild and redeploy the frontend. For example:
 
 ```
 NEXT_PUBLIC_BACKEND_URL=https://your-backend.example.com
+NEXT_PUBLIC_API_TIMEOUT_MS=60000
 ```
+
+## Tests
+
+`npm run test:api` runs the API-client unit tests on Node's built-in test runner. It compiles the TypeScript client with the repo's own `tsc` and stubs `fetch`, so it needs no test framework dependency and no network access.
 
 ## Pages
 
