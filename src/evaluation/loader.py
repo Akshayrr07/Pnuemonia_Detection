@@ -1,8 +1,9 @@
 """Model loading isolated to the evaluation entry point.
 
-The shared deployment/inference loader is intentionally not changed. Evaluation
-runs need the selected model order and checkpoint directory to be explicit, so
-they get a small loader local to this package.
+Evaluation runs need the selected model order and checkpoint directory to be
+explicit, so the orchestration stays local to this package.  Checkpoint
+deserialization itself is delegated to the shared trusted loader so evaluation
+cannot drift from the deployment/inference safety policy.
 """
 
 from __future__ import annotations
@@ -10,6 +11,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Sequence
+
+from src.inference.checkpoint import load_trusted_checkpoint
 
 
 def load_evaluation_models(
@@ -19,7 +22,6 @@ def load_evaluation_models(
 ):
     """Load named checkpoints in the exact order supplied by the evaluator."""
 
-    import torch
     from src.models.model_factory import get_model
 
     directory = Path(checkpoint_dir)
@@ -27,12 +29,8 @@ def load_evaluation_models(
     for name in model_names:
         model = get_model(name, freeze=False).to(device)
         checkpoint_path = directory / f"{name}.pt"
-        state_dict = torch.load(
-            checkpoint_path,
-            map_location=device,
-            weights_only=True,
-        )
-        model.load_state_dict(state_dict)
+        state_dict = load_trusted_checkpoint(checkpoint_path, map_location=device)
+        model.load_state_dict(state_dict, strict=True)
         model.eval()
         models.append(model)
     return models

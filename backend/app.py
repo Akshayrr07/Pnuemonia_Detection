@@ -51,6 +51,7 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 from pydantic import BaseModel
 
+from src.inference.checkpoint import load_trusted_checkpoint
 from src.inference.hierarchical_pipeline import HierarchicalPneumoniaPipeline
 from src.inference.huggingface_adapter import HuggingFaceInferenceError
 from src.inference.schemas import HierarchicalPrediction
@@ -189,8 +190,12 @@ async def lifespan(app: FastAPI):
             from src.models.model_factory import get_model
 
             _local_model = get_model(LOCAL_MODEL_NAME, num_classes=3, freeze=False)
-            state_dict = torch.load(LOCAL_MODEL_PATH, map_location="cpu")
-            _local_model.load_state_dict(state_dict)
+            state_dict = load_trusted_checkpoint(
+                LOCAL_MODEL_PATH,
+                map_location="cpu",
+                expected_task="3_class",
+            )
+            _local_model.load_state_dict(state_dict, strict=True)
             _local_model.eval()
             _local_model_device = torch.device("cpu")
         except Exception:
