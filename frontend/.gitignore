@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+# transpiled output of the zero-dependency API test runner
+/.api-test-build
 
 # next.js
 /.next/
