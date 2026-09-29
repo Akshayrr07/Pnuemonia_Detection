@@ -1,5 +1,7 @@
+import random
 from typing import Tuple
 
+import torch
 from PIL import Image
 from torchvision import transforms
 
@@ -31,7 +33,16 @@ def preprocess_image(image: Image.Image):
     return get_inference_transform()(image)
 
 
-def get_train_transforms():
+def get_train_transforms(seed=None):
+    """Build train transforms; a supplied seed resets their random streams."""
+
+    if seed is not None:
+        # torchvision 0.15 random transforms do not expose per-object
+        # generators and draw from both Python and PyTorch global RNGs.
+        seed = int(seed)
+        random.seed(seed)
+        torch.manual_seed(seed)
+
     return transforms.Compose([
         transforms.Resize(IMAGE_SIZE),
         transforms.RandomRotation(10),

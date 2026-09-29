@@ -19,8 +19,15 @@ training:
   batch_size: 16
   epochs: 30
   patience: 7
+  min_delta: 0.002
+  # Checkpointing and early stopping use validation loss only.
+  selection_metric: val_loss
   learning_rate: 0.0001
   use_class_weights: true
+
+determinism:
+  enabled: true
+  num_workers: 0
 
 output:
   checkpoint_path: saved_models/bacterial_vs_viral.pt
