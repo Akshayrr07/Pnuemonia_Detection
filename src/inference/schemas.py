@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 DEFAULT_DISCLAIMER = (
     "This result is for educational support only and is not a medical diagnosis. "

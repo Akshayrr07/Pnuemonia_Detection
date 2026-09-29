@@ -84,7 +84,9 @@ def main() -> None:
         print("/health: PASS")
 
         img = Image.new("RGB", (224, 224), color=(100, 110, 120))
-        buf = io.BytesIO(); img.save(buf, format="PNG"); buf.seek(0)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
         r = client.post("/predict", files={"file": ("xray.png", buf, "image/png")})
         body = r.json()
         assert r.status_code == 200
@@ -101,7 +103,9 @@ def main() -> None:
     with patch.object(backend_module, "_load_explainability", return_value=None) as mock2:
         client = TestClient(backend_module.app)
         img = Image.new("RGB", (224, 224), color=(50, 60, 70))
-        buf = io.BytesIO(); img.save(buf, format="PNG"); buf.seek(0)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
         r = client.post("/predict", files={"file": ("noxray.png", buf, "image/png")})
         body = r.json()
         assert r.status_code == 200 and body["heatmap_b64"] is None
@@ -120,7 +124,9 @@ def main() -> None:
     with patch.object(backend_module, "_load_explainability", side_effect=_fail_heatmap) as mock3:
         client = TestClient(backend_module.app)
         img = Image.new("RGB", (224, 224), color=(80, 90, 100))
-        buf = io.BytesIO(); img.save(buf, format="PNG"); buf.seek(0)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
         r = client.post("/predict", files={"file": ("failxray.png", buf, "image/png")})
         body = r.json()
         assert r.status_code == 200

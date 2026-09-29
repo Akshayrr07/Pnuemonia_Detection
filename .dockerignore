@@ -1,4 +1,8 @@
 # Build artifacts and dependencies — excluded from Docker build context
+# Local model/data artifacts must be supplied by an explicit runtime volume.
+models/
+*.pt
+data/raw_datasets/
 .venv/
 .eggs/
 *.egg-info/
