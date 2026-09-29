@@ -68,6 +68,40 @@ Expected local command shape:
 docker compose up --build
 ```
 
+## Dependency and installation policy
+
+- Supported Python runtime: **3.11.x** (also declared in `pyproject.toml`).
+- The production API depends only on the lightweight hosted-inference set in
+  `backend/requirements.in`; its resolved metadata is in
+  `backend/constraints.txt`.
+- Training, evaluation, dataset preparation, and the legacy research app use
+  the separate `requirements-research.in` / `requirements-research.lock` pair.
+- Grad-CAM is optional and is not required for the hosted backend. Install
+  `backend/requirements-explainability.in` (and its lock metadata) only when a
+  local checkpoint path is configured.
+- Portable requirements never use CUDA-local version suffixes such as
+  `torch==2.0.1+cu117`. For CUDA, select a supported wheel backend explicitly:
+
+  ```bash
+  uv pip install --torch-backend=cu124 -r requirements-research.in
+  ```
+
+  The exact backend must match the host driver/runtime. The default install is
+  the portable published-wheel path; use the CPU backend when CUDA is not
+  required.
+- Regenerate metadata rather than hand-editing locks:
+
+  ```bash
+  uv pip compile backend/requirements.in --python-version 3.11 --universal \
+    --output-file backend/constraints.txt --no-annotate
+  uv pip compile requirements-research.in --python-version 3.11 --universal \
+    --output-file requirements-research.lock --no-annotate
+  ```
+
+Platform-specific lock output may include CUDA dependencies when resolving for
+a Linux target. Review the generated lock for the deployment platform before
+using it in an image or worker.
+
 ## Environment Variables
 
 The backend should use environment variables for deployment-specific settings:
@@ -80,6 +114,10 @@ HF_API_BASE_URL=
 PNEUMONIA_THRESHOLD=
 SUBTYPE_THRESHOLD=
 HF_REQUEST_TIMEOUT_SECONDS=
+PREDICTION_DEADLINE_SECONDS=
+INFERENCE_MAX_CONCURRENCY=
+INFERENCE_WORKERS=
+INFERENCE_RATE_LIMIT_PER_SECOND=
 ALLOWED_ORIGINS=
 APP_ENV=production
 MAX_UPLOAD_MB=

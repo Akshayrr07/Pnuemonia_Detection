@@ -14,20 +14,42 @@ from fastapi.testclient import TestClient
 def backend_with_origins(
     origins: str | None, *, environment: str = "development"
 ) -> Iterator[object]:
-    """Import a fresh app with isolated CORS environment settings."""
+    """Import a fresh app with isolated CORS environment settings.
+
+    Sibling test modules set hosted-model variables process-wide at import
+    time. Clearing them here keeps these cases from inheriting a valid
+    pipeline configuration, so liveness/readiness behavior is asserted
+    against the environment the case actually describes.
+    """
     env = {
         "APP_ENV": environment,
         "ENVIRONMENT": environment,
     }
+    hosted_model_vars = (
+        "HF_BINARY_MODEL_ID",
+        "HF_SUBTYPE_MODEL_ID",
+        "HF_TOKEN",
+        "HF_API_BASE_URL",
+    )
+    saved = {name: os.environ.get(name) for name in hosted_model_vars}
     with patch.dict(os.environ, env, clear=False):
+        for name in hosted_model_vars:
+            os.environ.pop(name, None)
         # Remove an inherited value when the test is explicitly checking an unset
         # ALLOWED_ORIGINS.
         if origins is None:
             os.environ.pop("ALLOWED_ORIGINS", None)
         else:
             os.environ["ALLOWED_ORIGINS"] = origins
-        module = importlib.reload(importlib.import_module("backend.app"))
-        yield module
+        try:
+            module = importlib.reload(importlib.import_module("backend.app"))
+            yield module
+        finally:
+            for name, value in saved.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
 
 
 def test_explicitly_configured_origin_is_allowed() -> None:

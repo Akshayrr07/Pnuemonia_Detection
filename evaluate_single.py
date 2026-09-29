@@ -1,38 +1,98 @@
-import torch
-import os
-from datetime import datetime
-import torch.nn.functional as F
-from tqdm import tqdm
+"""Run reproducible individual-model evaluation.
 
+Metric calculations are preserved from the original script. Dataset, split,
+and checkpoint metadata are recorded in every report, and the model/data
+selection is explicit through the shared evaluation configuration.
+"""
+
+from __future__ import annotations
+
+import json
+import multiprocessing
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, Sequence
+
+import torch
+import torch.nn.functional as F
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
     confusion_matrix,
-    roc_auc_score
+    roc_auc_score,
 )
+from tqdm import tqdm
 
 from src.data.dataloader import get_dataloaders
-from src.models.model_factory import get_model
-
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# 🔹 Load data
-_, _, test_loader = get_dataloaders(
-    "data/splits/train.csv",
-    "data/splits/val.csv",
-    "data/splits/test.csv"
+from src.evaluation.config import (
+    DEFAULT_CHECKPOINT_DIR,
+    DEFAULT_SINGLE_MODEL_NAMES,
+    EvaluationConfig,
+    parse_args,
 )
+from src.evaluation.loader import load_evaluation_models
+from src.evaluation.metadata import dataset_metadata, model_metadata, split_metadata
 
 
-def evaluate_model(model_name, file):
+def _resolve_device(requested: str):
+    if requested == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(requested)
+
+
+def _report_path(config: EvaluationConfig) -> Path:
+    if config.report_path:
+        return Path(config.report_path)
+    return Path(config.report_dir) / (
+        f"single_model_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    )
+
+
+def _write_metadata(file, config: EvaluationConfig, device) -> None:
+    split_blocks = [
+        split_metadata("train", config.train_csv, dataset_root=config.dataset_root),
+        split_metadata("validation", config.val_csv, dataset_root=config.dataset_root),
+        split_metadata("test", config.test_csv, dataset_root=config.dataset_root),
+    ]
+    provenance = {
+        "config": config.to_dict(),
+        "dataset": dataset_metadata(
+            split_blocks,
+            dataset_root=config.dataset_root,
+        ),
+        "models": model_metadata(config.model_names, config.checkpoint_dir),
+        "device": str(device),
+    }
+    file.write("Evaluation configuration:\n")
+    file.write(json.dumps(provenance["config"], sort_keys=True) + "\n")
+    file.write("Dataset and split metadata:\n")
+    file.write(json.dumps(provenance["dataset"], sort_keys=True) + "\n")
+    file.write("Model metadata:\n")
+    file.write(json.dumps(provenance["models"], sort_keys=True) + "\n")
+    file.write(f"Device: {device}\n" + "-" * 60 + "\n")
+
+
+def evaluate_model(
+    model_name,
+    file,
+    *,
+    device=None,
+    test_loader=None,
+    checkpoint_dir=DEFAULT_CHECKPOINT_DIR,
+):
+    """Evaluate one named model without changing the original metrics."""
+
+    if device is None:
+        device = _resolve_device("auto")
+    if test_loader is None:
+        raise ValueError("test_loader must be supplied for evaluation")
 
     print(f"\n===== {model_name.upper()} =====")
-
-    model = get_model(model_name, num_classes=3, freeze=False)
-    model.load_state_dict(torch.load(f"saved_models/{model_name}.pt", weights_only=True))
-    model.to(device)
-    model.eval()
+    model = load_evaluation_models(
+        device,
+        model_names=(model_name,),
+        checkpoint_dir=checkpoint_dir,
+    )[0]
 
     all_preds = []
     all_labels = []
@@ -51,13 +111,11 @@ def evaluate_model(model_name, file):
             all_labels.extend(labels.cpu().numpy())
             all_probs.extend(probs.cpu().numpy())
 
-    # 🔥 Metrics
     acc = accuracy_score(all_labels, all_preds)
     report = classification_report(all_labels, all_preds, digits=4)
     cm = confusion_matrix(all_labels, all_preds)
     auc = roc_auc_score(all_labels, all_probs, multi_class='ovr')
 
-    # 🔥 Print + Save
     text = f"""
 ===== {model_name.upper()} =====
 Accuracy: {acc:.4f}
@@ -76,35 +134,47 @@ AUC: {auc:.4f}
     return acc
 
 
-def main():
+def main(argv: Optional[Sequence[str]] = None) -> Path:
+    """Execute individual-model evaluation and return the report path."""
 
-    os.makedirs("reports", exist_ok=True)
+    config = parse_args(argv, default_model_names=DEFAULT_SINGLE_MODEL_NAMES)
+    device = _resolve_device(config.device)
+    report_path = _report_path(config)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
 
-    report_path = f"reports/single_model_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    _, _, test_loader = get_dataloaders(
+        config.train_csv,
+        config.val_csv,
+        config.test_csv,
+        batch_size=config.batch_size,
+    )
 
-    with open(report_path, "w") as f:
-
-        f.write("===== INDIVIDUAL MODEL EVALUATION =====\n")
-
-        model_names = ["mobilenet", "efficientnet", "resnet", "densenet"]
+    with report_path.open("w", encoding="utf-8") as file:
+        file.write("===== INDIVIDUAL MODEL EVALUATION =====\n")
+        _write_metadata(file, config, device)
 
         results = {}
-
-        for model_name in model_names:
-            acc = evaluate_model(model_name, f)
+        for model_name in config.model_names:
+            acc = evaluate_model(
+                model_name,
+                file,
+                device=device,
+                test_loader=test_loader,
+                checkpoint_dir=config.checkpoint_dir,
+            )
             results[model_name] = acc
 
-        # 🔥 Summary Table
-        f.write("\n===== SUMMARY =====\n")
+        file.write("\n===== SUMMARY =====\n")
         print("\n===== SUMMARY =====")
-
-        for k, v in results.items():
-            line = f"{k}: {v:.4f}"
+        for model_name, value in results.items():
+            line = f"{model_name}: {value:.4f}"
             print(line)
-            f.write(line + "\n")
+            file.write(line + "\n")
 
     print(f"\n📄 Report saved at: {report_path}")
+    return report_path
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()

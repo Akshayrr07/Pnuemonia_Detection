@@ -31,7 +31,9 @@ Shared inference code lives in `src/inference/` and is imported directly by the 
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.11.x (the supported runtime for this backend)
+- `uv` is recommended for reproducible installs; a standard virtual environment
+  and `pip` also work
 - Setuptools-compatible install of the repo so that `src/` is importable, or run with `PYTHONPATH=.`
 
 ## Install
@@ -39,7 +41,17 @@ Shared inference code lives in `src/inference/` and is imported directly by the 
 From the repository root:
 
 ```bash
-pip install -r backend/requirements.txt
+uv venv --python 3.11
+uv pip install -r backend/requirements.txt
+```
+
+`backend/requirements.in` contains the supported ranges and
+`backend/constraints.txt` records the resolved Python 3.11 metadata. If the
+optional local Grad-CAM path is needed, install its separate dependency set
+as well:
+
+```bash
+uv pip install -r backend/requirements-explainability.txt
 ```
 
 If `src/` is not installed as a package, set the Python path:
@@ -65,6 +77,10 @@ export HF_API_BASE_URL=https://api-inference.huggingface.co/models
 export PNEUMONIA_THRESHOLD=0.5
 export SUBTYPE_THRESHOLD=0.5
 export HF_REQUEST_TIMEOUT_SECONDS=60
+export PREDICTION_DEADLINE_SECONDS=65
+export INFERENCE_MAX_CONCURRENCY=4
+export INFERENCE_WORKERS=4
+export INFERENCE_RATE_LIMIT_PER_SECOND=0
 export UPLOAD_MAX_SIZE_MB=10
 export ALLOWED_ORIGINS=http://localhost:3000,https://example.com
 export APP_ENV=production
@@ -158,12 +174,20 @@ If pneumonia is not detected, `subtype_prediction` and `subtype_confidence` are 
 - Accepted content types: `image/jpeg`, `image/png`, `image/jpg`.
 - Accepted file extensions: `.jpg`, `.jpeg`, `.png`.
 - Uploads exceeding `UPLOAD_MAX_SIZE_MB` are rejected.
+- Image dimensions must not exceed `MAX_IMAGE_WIDTH` × `MAX_IMAGE_HEIGHT`, and
+  total pixels must not exceed `MAX_IMAGE_PIXELS` (defaults: 8192 × 8192 and
+  40,000,000 pixels).
+- Decoded images must be PNG or JPEG, even when the filename/content type says
+  otherwise. Only single-frame images are accepted.
+- Pillow decompression-bomb warnings and errors are rejected before inference.
 - Corrupt or undecodable images are rejected with a `400` error.
 
 ### Errors
 
 - `400` — invalid file type, too large, unsupported extension, or undecodable image.
-- `503` — prediction pipeline not available, usually because required environment variables are missing.
+- `503` — prediction pipeline not available, or the process-local inference capacity guard is full.
+- `504` — the total prediction deadline elapsed.
+- `502` — the hosted inference provider returned a known or unhandled provider error; raw upstream response bodies are not returned.
 
 ## CORS
 
