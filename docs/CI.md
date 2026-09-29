@@ -19,9 +19,12 @@ Pull requests from forks still run CI, but auto-merge is skipped.
 
 ## Checks
 
-### Python (compile, phase tests, dependency audit)
+### Python (compile, tests, dependency audit)
 
 - Python source compilation.
+- The regression suites under `tests/` (dataset paths, patient split helpers,
+  evaluation reproducibility) and `backend/test_inference_reliability.py`,
+  run with pytest against a CPU torch install.
 - The repository's executable backend verification scripts.
 - `pip-audit` against the pinned backend and research dependency metadata.
 

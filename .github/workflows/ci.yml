@@ -49,7 +49,7 @@ jobs:
         run: npm audit --audit-level=high
 
   python:
-    name: Python (compile, phase tests, dependency audit)
+    name: Python (compile, tests, dependency audit)
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -73,6 +73,30 @@ jobs:
       - name: Compile Python source
         run: |
           .venv-backend/bin/python -m compileall -q backend src experiments app main.py evaluate.py evaluate_single.py
+
+      # The regression suites under tests/ (dataset paths, split leakage,
+      # evaluation reproducibility) plus backend/test_inference_reliability.py
+      # are the project's real test suite. They need torch (via
+      # src/data/dataset.py), pandas, and scikit-learn, so install the CPU
+      # torch set used by the optional explainability requirements plus the
+      # test-time research dependencies — matching the Dockerfile approach and
+      # avoiding multi-GB CUDA wheels in CI.
+      - name: Install CPU torch for regression tests
+        run: |
+          uv pip install --python .venv-backend/bin/python \
+            --index-url https://download.pytorch.org/whl/cpu \
+            --extra-index-url https://pypi.org/simple \
+            --index-strategy unsafe-best-match \
+            -r backend/requirements-explainability.txt
+          uv pip install --python .venv-backend/bin/python \
+            pytest "pandas>=2.1,<3" "scikit-learn>=1.3,<1.6" "tqdm>=4.66,<5"
+
+      - name: Run regression tests
+        env:
+          HF_BINARY_MODEL_ID: test/binary
+          HF_SUBTYPE_MODEL_ID: test/subtype
+        run: |
+          PYTHONPATH=. .venv-backend/bin/python -m pytest tests/ backend/test_inference_reliability.py -q
 
       - name: Run phase tests
         env:

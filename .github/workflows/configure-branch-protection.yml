@@ -27,7 +27,7 @@ jobs:
           script: |
             const requiredChecks = [
               "Frontend (clean install, lint, typecheck, build)",
-              "Python (compile, phase tests, dependency audit)",
+              "Python (compile, tests, dependency audit)",
               "Docker image",
               "frontend",
             ];
