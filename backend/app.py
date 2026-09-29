@@ -522,7 +522,10 @@ async def predict(file: UploadFile = File(...)):
                     "Cannot explain aggregate Pneumonia without a concrete subtype"
                 )
 
-            from src.inference.explainability import grad_cam_class_index
+            # This lookup is dependency-free: the hosted-inference image ships
+            # without NumPy/PyTorch, so importing the full explainability module
+            # here would fail for what is only a class-index lookup.
+            from src.inference.gradcam_classes import grad_cam_class_index
 
             heatmap_b64 = _load_explainability()(
                 model=_local_model,

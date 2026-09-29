@@ -40,27 +40,12 @@ _STD = [0.229, 0.224, 0.225]
 
 # Local checkpoints produced by this repository use the dataset registry's
 # three-class encoding. There is no aggregate "Pneumonia" output class.
-_GRAD_CAM_CLASS_TO_INDEX = {
-    "Normal": 0,
-    "Bacterial Pneumonia": 1,
-    "Viral Pneumonia": 2,
-}
-
-
-def grad_cam_class_index(class_name: str) -> int:
-    """Return the local three-class checkpoint index for *class_name*.
-
-    Aggregate binary output ``"Pneumonia"`` is intentionally unsupported: the
-    checkpoint has separate bacterial and viral classes, not a Pneumonia class.
-    """
-    try:
-        return _GRAD_CAM_CLASS_TO_INDEX[class_name]
-    except KeyError as exc:
-        raise ValueError(
-            "Grad-CAM requires a concrete local checkpoint class "
-            f"(one of {tuple(_GRAD_CAM_CLASS_TO_INDEX)}), not aggregate Pneumonia: "
-            f"{class_name!r}"
-        ) from exc
+# The mapping itself lives in a dependency-free module so the prediction route
+# can look up a class index without importing NumPy/PyTorch.
+from src.inference.gradcam_classes import (  # noqa: F401
+    GRAD_CAM_CLASS_TO_INDEX as _GRAD_CAM_CLASS_TO_INDEX,
+    grad_cam_class_index,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +119,12 @@ def generate_heatmap(
     Returns None when Grad-CAM fails for any reason.
     """
     try:
+        # Runtime import: `torch` is only bound under TYPE_CHECKING above, and
+        # this function uses torch.relu/mean/sum at runtime. Importing here
+        # also keeps torchvision (used by _preprocess) out of the import path
+        # for callers that never request a heatmap.
+        import torch
+
         tensor, original_size = _preprocess(image)
         tensor = tensor.to(device)
 
